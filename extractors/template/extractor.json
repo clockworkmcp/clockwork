@@ -1,0 +1,7 @@
+{
+  "name": "my-source",
+  "source": "my-source",
+  "description": "What this brings in, in one sentence.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "restartSeconds": 60
+}

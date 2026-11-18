@@ -1,0 +1,20 @@
+{
+  "display_information": {
+    "name": "Clockwork reader",
+    "description": "Reads my own conversations into Clockwork on my machine. Cannot post."
+  },
+  "oauth_config": {
+    "scopes": {
+      "user": [
+        "channels:history", "groups:history", "im:history", "mpim:history",
+        "channels:read", "groups:read", "im:read", "mpim:read",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

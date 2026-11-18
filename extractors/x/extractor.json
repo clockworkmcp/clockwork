@@ -1,0 +1,11 @@
+{
+  "name": "x",
+  "source": "x",
+  "description": "Your X home timeline, read by a separate Chrome window on this Mac that you log in to yourself. X may restrict accounts that are read on a schedule.",
+  "cwd": "../../connectors/x-cloud",
+  "needs": "Google Chrome",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "env": { "CLOCKWORK_X_DATA": "{data}/x-local", "CLOCKWORK_X_LOCAL_APP": "Google Chrome", "CLOCKWORK_X_DISPLAY": "", "CLOCKWORK_X_LOGIN_HOST": "127.0.0.1" },
+  "connect": { "type": "flag", "file": "{data}/x-local/login-requested", "note": "A Chrome window will open on X's login page within a few seconds of Clockwork running. Log in there yourself; Clockwork never sees your password and never answers X's checks for you. X can restrict or suspend accounts that are read automatically." },
+  "restartSeconds": 300
+}

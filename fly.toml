@@ -1,0 +1,32 @@
+# One Fly app per user: a single machine running the whole instance, with one volume for all private data.
+# See README "Run in the cloud" for the create and deploy steps.
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[mounts]
+  source = "clockwork_data"
+  destination = "/data"
+  initial_size = "3gb"
+
+# Only the core is public, over HTTPS, and every route except /health needs the bearer token.
+# The WhatsApp link page (port 4599) is deliberately not exposed: reach it with `fly proxy 4599`.
+[http_service]
+  internal_port = 4600
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "60s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 2
+  memory = "2gb"

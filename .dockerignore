@@ -1,0 +1,12 @@
+**/node_modules
+**/__pycache__
+**/*.db
+**/*.db-*
+**/*.jsonl
+**/*.key
+**/token.json
+**/client.json
+.env
+.env.*
+connectors/whatsapp/clockwork-whatsapp*
+**/.venv

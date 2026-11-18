@@ -1,0 +1,9 @@
+{
+  "name": "rss",
+  "source": "rss",
+  "description": "New entries from the feeds you list (RSS, Atom and JSON Feed): blogs, podcasts, status pages, YouTube channels, Reddit inbox feeds. Read-only: it only fetches the feeds.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/feeds.txt", "help": "Create a plain text file with one feed address per line and save it there. Lines starting with # are notes, and \"name = address\" gives a feed your own name. Example line: Example blog = https://blog.example.com/feed.xml. Details: extractors/rss/README.md. Treat a feed address that contains a private key (such as a Reddit inbox feed) like a password." }],
+  "ready": { "file": "{extractorData}/feeds.txt" },
+  "restartSeconds": 60
+}

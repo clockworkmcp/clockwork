@@ -1,0 +1,17 @@
+node_modules/
+.env
+*.db
+*.db-*
+connectors/whatsapp/clockwork-whatsapp
+__pycache__/
+.env.*
+!.env.example
+*.key
+*.jsonl
+token.json
+client.json
+.venv/
+venv/
+.DS_Store
+# The landing page is kept outside this repository
+site/

@@ -1,0 +1,12 @@
+{
+  "name": "mastodon",
+  "source": "mastodon",
+  "description": "Mentions, quotes, posts you asked to be told about, ended polls and follow requests from your Mastodon notifications, read from your own server with a token that can only read notifications. Read-only: it never posts, boosts, follows or dismisses anything.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [
+    { "file": "{extractorData}/instance", "help": "Save the address of your Mastodon server in that file, for example https://mastodon.example" },
+    { "file": "{extractorData}/token", "help": "On your Mastodon server, open Preferences, Development, New application. Untick every permission except read:notifications, save, open the application and copy \"Your access token\" into that file. Then run chmod 600 on it. Steps: extractors/mastodon/README.md." }
+  ],
+  "ready": { "file": "{extractorData}/token" },
+  "restartSeconds": 60
+}

@@ -1,0 +1,9 @@
+{
+  "name": "imessage",
+  "source": "imessage",
+  "description": "Your iMessage and SMS texts, read from the Messages database on this Mac. Read-only: the database is opened for reading and nothing is ever sent or marked as read. macOS only.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "ready": { "file": "{extractorData}/enabled" },
+  "connect": { "type": "flag", "file": "{extractorData}/enabled", "note": "This copies your texts, including verification codes, into Clockwork on this Mac. macOS will only let it read them once you give Full Disk Access to the program that runs Clockwork (your terminal app, or node): System Settings > Privacy & Security > Full Disk Access. That is a broad permission and only you can grant it. Details: extractors/imessage/README.md." },
+  "restartSeconds": 60
+}

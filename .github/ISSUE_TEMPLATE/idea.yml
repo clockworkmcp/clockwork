@@ -1,0 +1,18 @@
+name: Idea or request
+description: A change to Clockwork itself. For a new source, write an extractor instead (see CONTRIBUTING.md).
+labels: [idea]
+body:
+  - type: textarea
+    id: problem
+    attributes: { label: "What are you trying to do?", description: "The situation, not the solution." }
+    validations: { required: true }
+  - type: textarea
+    id: idea
+    attributes: { label: "What would help?" }
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: This cannot be done as an extractor
+        - label: It does not need Clockwork to send, reply or post on my behalf

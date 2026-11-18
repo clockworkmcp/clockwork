@@ -1,0 +1,13 @@
+{
+  "name": "whatsapp",
+  "source": "whatsapp",
+  "description": "Your WhatsApp messages, read as a linked device. Read-only: it never sends, reacts or marks as read.",
+  "cwd": "../../connectors/whatsapp",
+  "needs": "Go 1.27 or newer (brew install go)",
+  "build": { "command": "go", "args": ["build", "-o", "clockwork-whatsapp", "."] },
+  "builtOutput": "clockwork-whatsapp",
+  "run": { "command": "./clockwork-whatsapp" },
+  "env": { "CLOCKWORK_WA_DATA": "{data}/whatsapp", "CLOCKWORK_WA_LISTEN": "127.0.0.1:4599" },
+  "connect": { "type": "open", "url": "http://127.0.0.1:4599", "note": "WhatsApp is linked by scanning a code: on your phone open WhatsApp > Settings > Linked devices > Link a device. WhatsApp can restrict or ban accounts that use unofficial clients such as this one; consider a secondary number first." },
+  "restartSeconds": 120
+}

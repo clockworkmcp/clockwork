@@ -1,0 +1,48 @@
+# One Clockwork instance for one user. Everything private lives in the `data` volume.
+# Required in .env: CLOCKWORK_TOKEN, CLOCKWORK_AGENT_TOKEN, CLOCKWORK_INGEST_TOKEN (long random strings).
+# Optional: ANTHROPIC_API_KEY to enable the teacher.
+services:
+  core:
+    build: ./core
+    restart: unless-stopped
+    environment:
+      CLOCKWORK_TOKEN: ${CLOCKWORK_TOKEN:?set CLOCKWORK_TOKEN in .env}
+      CLOCKWORK_AGENT_TOKEN: ${CLOCKWORK_AGENT_TOKEN:-}
+      CLOCKWORK_INGEST_TOKEN: ${CLOCKWORK_INGEST_TOKEN:-}
+      CLOCKWORK_STUDENT_URL: http://student:4601
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLOCKWORK_TEACHER_MODEL: ${CLOCKWORK_TEACHER_MODEL:-claude-opus-5-5}
+    volumes: [data:/data]
+    # Bound to loopback on the host: put a TLS reverse proxy (Caddy, Tailscale, Cloudflare Tunnel) in front before exposing it.
+    ports: ["127.0.0.1:4600:4600"]
+    depends_on: [student]
+  student:
+    build: ./student
+    restart: unless-stopped
+    volumes: [data:/data]
+  trainer:
+    build: ./student
+    restart: unless-stopped
+    command: ["./retrain-loop.sh"]
+    volumes: [data:/data]
+    depends_on: [student]
+  whatsapp:
+    build: ./connectors/whatsapp
+    restart: unless-stopped
+    environment:
+      CLOCKWORK_TOKEN: ${CLOCKWORK_TOKEN:?set CLOCKWORK_TOKEN in .env}
+      CLOCKWORK_INGEST_TOKEN: ${CLOCKWORK_INGEST_TOKEN:-}
+    volumes: [data:/data]
+    # The link page shows the QR code; its password is CLOCKWORK_TOKEN. Reach it over an SSH tunnel.
+    ports: ["127.0.0.1:4599:4599"]
+    depends_on: [core]
+  gmail:
+    build: ./connectors/gmail
+    restart: unless-stopped
+    environment:
+      CLOCKWORK_INGEST_TOKEN: ${CLOCKWORK_INGEST_TOKEN:?set CLOCKWORK_INGEST_TOKEN in .env}
+    # Needs /data/gmail/client.json (Google Desktop-app OAuth client) and token.json from `node main.mjs auth`.
+    volumes: [data:/data]
+    depends_on: [core]
+volumes:
+  data:

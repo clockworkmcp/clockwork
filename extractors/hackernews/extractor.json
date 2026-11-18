@@ -1,0 +1,9 @@
+{
+  "name": "hackernews",
+  "source": "hackernews",
+  "description": "Replies to your Hacker News comments and stories, and new stories and comments that match your keywords, read through the public Hacker News search. No login. Read-only: it cannot post or vote.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/config.json", "help": "Create a small text file with your Hacker News username and the words you want to follow, and save it there. Example: { \"username\": \"your_hn_name\", \"keywords\": [\"sqlite\", \"\\\"local first\\\"\"] }. Either part may be left out. No password is needed or wanted. Details: extractors/hackernews/README.md." }],
+  "ready": { "file": "{extractorData}/config.json" },
+  "restartSeconds": 60
+}

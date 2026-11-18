@@ -1,0 +1,9 @@
+{
+  "name": "jira",
+  "source": "jira",
+  "description": "Updates to the Jira Cloud issues you are assigned to, reported or watch (new comments, status and field changes), read through Jira's own API with an Atlassian API token. Read-only: it only ever asks Jira to show things and never changes an issue.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/login.json", "help": "Create an API token at https://id.atlassian.com/manage-profile/security/api-tokens and save a file there that looks like { \"site\": \"https://yourname.atlassian.net\", \"email\": \"you@example.com\", \"apiToken\": \"...\" }. Steps, and how to use a token that can only read: extractors/jira/README.md. This is almost always a work account: your employer's rules decide whether you may do this at all." }],
+  "ready": { "file": "{extractorData}/login.json" },
+  "restartSeconds": 60
+}

@@ -1,0 +1,9 @@
+{
+  "name": "calendar",
+  "source": "calendar",
+  "description": "New and changed events and invitations from calendars you subscribe to by their private iCalendar (.ics) address: Google Calendar, Outlook, iCloud, Fastmail and others. Read-only: it only downloads the calendar and cannot accept, decline or change anything.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/calendars.txt", "help": "Create that file with one calendar address per line (optionally \"Work = https://...\"). In Google Calendar: Settings > your calendar > \"Secret address in iCal format\". Outlook: Settings > Calendar > Shared calendars > Publish a calendar, ICS link. iCloud: share the calendar as a Public Calendar and copy the link. Fastmail: Settings > Calendars > Export. Treat each address like a password: anyone who has it can read that calendar. Details: extractors/calendar/README.md." }],
+  "ready": { "file": "{extractorData}/calendars.txt" },
+  "restartSeconds": 60
+}

@@ -1,0 +1,46 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - name: Core tests
+        run: cd core && npm ci && node --test
+      - name: CLI and supervisor tests
+        run: node --test cli/test/cli.test.mjs
+      - name: Gmail reader tests
+        run: cd connectors/gmail && node --test
+      - name: Extractor tests
+        run: node --test extractors/*/*.test.mjs
+      - uses: actions/setup-go@v5
+        with: { go-version-file: connectors/whatsapp/go.mod }
+      - name: WhatsApp reader builds
+        run: cd connectors/whatsapp && go vet ./... && go build -o clockwork-whatsapp .
+  install:
+    # The whole installer on a clean machine, then a trial run of a new extractor. Linux is not a supported setup yet,
+    # so only macOS must pass.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install into a throwaway folder
+        run: |
+          export CLOCKWORK_DATA="$RUNNER_TEMP/clockwork-data" CLOCKWORK_BIN="$RUNNER_TEMP/bin"
+          ./install.sh
+          "$CLOCKWORK_BIN/clockwork" doctor
+          "$CLOCKWORK_BIN/clockwork" new smoke
+          "$CLOCKWORK_BIN/clockwork" check smoke

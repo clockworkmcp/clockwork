@@ -1,0 +1,22 @@
+name: Something does not work
+description: An install, a command or an extractor fails or behaves wrongly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "**Do not paste message content, tokens, or any file from `~/.clockwork`.** Security problems: use the Security tab instead."
+  - type: textarea
+    id: what
+    attributes: { label: What you ran and what happened, description: The command, what you expected, and what you got. }
+    validations: { required: true }
+  - type: textarea
+    id: doctor
+    attributes: { label: Output of `clockwork doctor` and `clockwork status`, render: text }
+    validations: { required: true }
+  - type: input
+    id: system
+    attributes: { label: System, placeholder: "macOS 26.1 on Apple Silicon, Node 24.3, Python 3.12" }
+    validations: { required: true }
+  - type: dropdown
+    id: part
+    attributes: { label: Which part, options: [install, clockwork command, whatsapp, gmail, x, an extractor I added or wrote, local model or training, agent connection, other] }

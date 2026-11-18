@@ -1,0 +1,12 @@
+{
+  "name": "gmail",
+  "source": "gmail",
+  "description": "Your Gmail inbox through Google's own API, read-only.",
+  "cwd": "../../connectors/gmail",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "env": { "CLOCKWORK_GMAIL_DATA": "{data}/gmail" },
+  "requires": [{ "file": "{data}/gmail/client.json", "help": "Create a Google OAuth client of type \"Desktop app\" with the Gmail API switched on, download its JSON file and save it at that path. Steps: docs/LOCAL.md, \"Gmail\"." }],
+  "ready": { "file": "{data}/gmail/token.json" },
+  "connect": { "type": "command", "command": "node", "args": ["main.mjs", "auth"], "note": "Google will ask you to approve read-only access in your browser." },
+  "restartSeconds": 60
+}

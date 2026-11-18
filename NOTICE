@@ -1,0 +1,14 @@
+Clockwork
+Licensed under the Apache License, Version 2.0.
+
+Third-party components
+
+- whatsmeow (https://github.com/tulir/whatsmeow), Mozilla Public License 2.0. Used unmodified as a Go module by
+  connectors/whatsapp. Its source is available at the address above.
+- multilingual-e5-small (https://huggingface.co/intfloat/multilingual-e5-small), MIT. Not included in this repository;
+  downloaded from Hugging Face on first run.
+- Other Go, Node and Python dependencies are listed in connectors/whatsapp/go.mod, core/package.json and
+  student/requirements.txt, each under its own licence.
+
+WhatsApp, Gmail, Google, Slack, X, Outlook, Microsoft, iMessage, Apple, Discord, GitHub, GitLab, Linear, Jira, Atlassian,
+Bluesky, Mastodon and Hacker News are trademarks of their owners. Clockwork is not affiliated with or endorsed by them.

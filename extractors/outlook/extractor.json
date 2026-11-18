@@ -1,0 +1,10 @@
+{
+  "name": "outlook",
+  "source": "outlook",
+  "description": "New mail in your Outlook or Microsoft 365 inbox, read through Microsoft Graph with read-only permission. It cannot mark as read, move, delete or send.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/client.json", "help": "Register an application of your own at https://entra.microsoft.com (App registrations, New registration), switch on \"Allow public client flows\" under Authentication, give it the delegated Microsoft Graph permissions Mail.Read and offline_access only, and save its Application (client) ID in that file as { \"clientId\": \"...\", \"tenant\": \"common\" }. Steps: extractors/outlook/README.md. A work mailbox usually needs an administrator to allow the app, and it is your employer's decision whether work mail may be copied to this machine." }],
+  "ready": { "file": "{extractorData}/token.json" },
+  "connect": { "type": "command", "command": "node", "args": ["login.mjs"], "note": "You will be shown an address and a short code. Open the address in your browser, enter the code, sign in and approve read-only access to your mail." },
+  "restartSeconds": 60
+}

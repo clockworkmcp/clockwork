@@ -1,0 +1,9 @@
+{
+  "name": "bluesky",
+  "source": "bluesky",
+  "description": "Replies, mentions and quotes from your Bluesky notifications, read through Bluesky's own API with an app password. Read-only: it never posts, likes, follows or marks anything as read.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/login.json", "help": "In Bluesky, open Settings, Privacy and security, App passwords, and add one. Leave \"Allow access to your direct messages\" switched off. Save it in that file as { \"handle\": \"you.bsky.social\", \"appPassword\": \"xxxx-xxxx-xxxx-xxxx\" } and run chmod 600 on the file. Never use your main password. Steps: extractors/bluesky/README.md." }],
+  "ready": { "file": "{extractorData}/login.json" },
+  "restartSeconds": 60
+}

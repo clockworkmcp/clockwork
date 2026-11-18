@@ -1,0 +1,9 @@
+{
+  "name": "gitlab",
+  "source": "gitlab",
+  "description": "Your pending GitLab to-do items (mentions, assignments, review requests, failed pipelines, approvals), read through GitLab's own API with a read-only token you create. Read-only: it never marks a to-do as done.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/token", "help": "On GitLab select your avatar, Edit profile, Access, Personal access tokens, create a token with only the \"read_api\" scope, and save it (starts with glpat-) in that file. For a GitLab that is not gitlab.com, also save its address (for example https://gitlab.example.com) in a file named \"host\" next to it. Steps: extractors/gitlab/README.md. For a work account, your employer's rules decide whether you may do this at all." }],
+  "ready": { "file": "{extractorData}/token" },
+  "restartSeconds": 60
+}

@@ -1,0 +1,4 @@
+#!/bin/sh
+# Resolve symlinks so `clockwork` works when linked into a bin folder.
+SELF="$0"; while [ -L "$SELF" ]; do L=$(readlink "$SELF"); case "$L" in /*) SELF="$L";; *) SELF="$(dirname "$SELF")/$L";; esac; done
+exec node "$(cd "$(dirname "$SELF")/.." && pwd)/cli/clockwork.mjs" "$@"
