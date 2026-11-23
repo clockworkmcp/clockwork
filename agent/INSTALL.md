@@ -4,6 +4,22 @@ Your user asked you to install Clockwork on this machine. Follow these steps in 
 only does the few things marked **user**. When you are done, you are also Clockwork's teacher: your working instructions
 are in [SKILL.md](SKILL.md).
 
+## When the install is finished
+
+Not when the service runs. **The install is finished only when the tool `get_setup_status` answers
+`"finished": true`.** That takes all four of these:
+
+1. at least one feed is linked and delivering,
+2. you are connected to Clockwork over MCP, as one of your own MCP servers,
+3. you will hear about urgent items and heads-ups: you subscribed to the events `urgent_item` and `heads_up_item`, or,
+   if your platform has no MCP events, you scheduled a check that polls for them,
+4. your recurring labelling check is scheduled and has run once.
+
+Go from each step to the next without waiting to be asked. Do not tell the user Clockwork is installed, and do not end
+your turn as if you were done, while any of the four is open. The only reason to pause is a step marked **user**: say
+exactly what they need to do, and carry on as soon as they have done it. If they decline a step (for example, they do
+not want a tunnel), say plainly which of the four is therefore not done.
+
 ## Rules
 
 - **Never print, copy or log a token or key.** Refer to the file that holds it. The user saves account tokens into files
@@ -53,7 +69,8 @@ clockwork agent
 This prints the MCP address (`http://127.0.0.1:4600/mcp`), the file holding your token, and the skill file. Add Clockwork
 to your own MCP servers as an HTTP server that sends `Authorization: Bearer <contents of the token file>`, and install
 [SKILL.md](SKILL.md) the way your runtime installs skills (for OpenClaw: copy this `agent/` folder into the skills folder
-as `clockwork`). Confirm it works by calling `get_source_health`.
+as `clockwork`). Confirm it works by calling the tool `get_setup_status` through that MCP connection. Calling Clockwork
+with `curl` from a shell does not count: your scheduled runs will not have that shell.
 
 **If you run in a vendor's cloud and reach this machine remotely** (a ChatGPT dot, Grok Bot, Claude Duet), you cannot
 use `127.0.0.1` for your regular work: your scheduled checks and event wake-ups run in the cloud. Clockwork then needs a
@@ -67,13 +84,14 @@ up only after they say yes:
    `clockwork start`.
 3. The **user** adds `<address>/mcp` to you as a custom MCP server with OAuth, and approves the connection on
    Clockwork's own page with the admin token from that config file. Never read the token out or type it for them.
-4. Subscribe to the events `urgent_item` and `heads_up_item` if your platform supports MCP events.
+4. Call `get_setup_status` through the new connection to confirm it works. You subscribe to events in step 5.
 
 The details for each agent are in [docs/CONNECT.md](../docs/CONNECT.md).
 
 ## 4. Link the sources the user wants
 
-Run `clockwork extractors` and tell the user which sources are available (WhatsApp, Gmail, Slack, X, Outlook, iMessage,
+Do this now, without waiting for the user to bring it up: Clockwork with no feed does nothing. Run
+`clockwork extractors` and tell the user which sources are available (WhatsApp, Gmail, Slack, X, Outlook, iMessage,
 calendar, Discord, GitHub, GitLab, Linear, Jira, Bluesky, Mastodon, Hacker News, RSS). Ask which they want. For each
 one run:
 
@@ -95,20 +113,44 @@ Details are in [docs/LOCAL.md](../docs/LOCAL.md) and each extractor's own `READM
 [docs/RISKS.md](../docs/RISKS.md) for that source (WhatsApp and X can restrict accounts; a work Slack is the employer's
 decision). Link it only after they say yes.
 
+After each one, call `get_source_health` until it shows the source as connected. A source that is linked but not
+delivering is not done: read `clockwork logs <name>` and fix it or tell the user what it is waiting for.
+
 If they want a source that is not built in, follow [SOURCES.md](SOURCES.md) after the install is working.
 
-## 5. Start teaching
+## 5. Arrange your wake-ups and start teaching
 
-Every source starts in shadow mode: the local model decides nothing until it agrees with you. Follow
-[SKILL.md](SKILL.md): set up your recurring check, label what `get_items_to_label` returns, and tell the user about
-urgent items.
+Every source starts in shadow mode: the local model decides nothing until it agrees with you. Do all three now:
 
-## 6. Report back
+1. **Wake-ups.** Subscribe to the MCP events `urgent_item` and `heads_up_item`. If your platform cannot subscribe to MCP
+   events, schedule a check every few minutes that calls `get_urgent_updates` and `get_heads_up_updates` with the cursor
+   from last time, run it once, and tell the user that alerts will be as slow as that schedule.
+2. **Labelling.** Schedule your recurring check (every 10 to 15 minutes) that calls `get_items_to_label` and answers with
+   `submit_labels`. Run it once now.
+3. **What matters to this user.** Ask them who and what they always want to hear about quickly, and turn the answers into
+   heads-up rules with `set_heads_up_rules`.
+
+The rest of your regular work is in [SKILL.md](SKILL.md).
+
+## 6. Check that you are finished
+
+Call `get_setup_status`. If `finished` is not `true`, do what `next` says and call it again. Repeat until it is. The
+user can see the same list with `clockwork status`.
+
+## 7. Report back
 
 Tell the user, without quoting any message content:
 
+- what `get_setup_status` says, step by step,
 - the output of `clockwork doctor` and `clockwork status`,
 - which sources are linked and which are waiting on them,
 - anything that failed, with the command and its output (`clockwork logs <name>` shows a part's recent output).
 
 To stop or remove: `clockwork stop` stops it and removes the login item; the data is the `~/.clockwork/v2` folder.
+
+## Trying it first, without any account
+
+If the user wants to see it work before linking anything, run `clockwork demo` after step 2. It starts a throwaway
+copy on port 4610 with made-up messages and prints its own address and token file. Connect to that, follow
+`get_setup_status` there, and stop it with Ctrl-C when they have seen enough. Nothing in the demo is real and it does
+not touch the real install.

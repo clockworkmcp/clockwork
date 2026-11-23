@@ -12,12 +12,18 @@ Clockwork needs an agent to teach it. This page says what any agent needs, then 
    folder the way your agent installs skills, under the name `clockwork`.
 3. **A recurring check.** Every 10 to 15 minutes the agent calls `get_items_to_label`, judges each item and answers
    with `submit_labels`. Without a schedule nothing gets labelled and the local model never learns.
-4. **Optional: wake-ups.** An agent that can receive webhooks can subscribe to two MCP events instead of waiting for
+4. **Wake-ups.** An agent that can receive webhooks subscribes to two MCP events instead of waiting for
    its next check: `urgent_item` (an item was filed as urgent) and `heads_up_item` (an item matched one of the agent's
    own heads-up rules, or the local model thinks it may need attention). Both carry only an item id; the agent reads
    the item over MCP. Agents that cannot receive webhooks poll `get_urgent_updates` and `get_heads_up_updates`.
 
-To check the connection, ask the agent to call `get_source_health`.
+**Setup is finished when the agent's `get_setup_status` tool says so.** It checks all four points above plus that a
+feed is delivering, and tells the agent what to do next. Agents tend to stop once the service runs; if yours did, ask
+it to call `get_setup_status` and finish what it lists. `clockwork status` shows you the same checklist.
+
+To try all of this without linking an account, run `clockwork demo`: a throwaway copy on port 4610 with made-up
+messages, its own token and a heads-up rule that fires every few messages. For an agent in a vendor's cloud, put your
+tunnel in front of port 4610 and run `clockwork demo --public=<the tunnel's https address>`.
 
 ## Agents on the same machine, and agents somewhere else
 

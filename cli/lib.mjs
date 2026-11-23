@@ -1,5 +1,5 @@
 // Shared pieces of the local install: the config file, extractor manifests, and the login service definition.
-import crypto from 'node:crypto'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path';
+import crypto from 'node:crypto'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -109,3 +109,24 @@ export function plist({ node = process.execPath, cli = path.join(ROOT, 'cli', 'c
 
 export const readState = () => readJson(paths.state(), null);
 export const supervisorAlive = () => { const pid = Number(readJson(paths.pid(), 0)); if (!pid) return 0; try { process.kill(pid, 0); return pid; } catch { return 0; } };
+
+// ---- version and upgrades -----------------------------------------------------------------------------------------
+export const version = () => readJson(path.join(ROOT, 'core', 'package.json'), {}).version || 'unknown';
+const git = (root, ...a) => { const r = spawnSync('git', ['-C', root, ...a], { encoding: 'utf8' }); return { ok: r.status === 0, out: (r.stdout || '').trim(), err: (r.stderr || '').trim() }; };
+export const commitOf = (root = ROOT) => { const r = git(root, 'rev-parse', '--short', 'HEAD'); return r.ok ? r.out : null; };
+/** Where this copy stands against the place it was cloned from. Fetches; changes no file. */
+export function upgradeState(root = ROOT) {
+  const top = git(root, 'rev-parse', '--show-toplevel'); if (!top.ok || fs.realpathSync(top.out) !== fs.realpathSync(root)) return { state: 'not-git' };
+  const up = git(root, 'rev-parse', '--abbrev-ref', '@{upstream}'); if (!up.ok) return { state: 'no-upstream' };
+  const f = git(root, 'fetch', '--quiet', up.out.split('/')[0]); if (!f.ok) return { state: 'offline', error: f.err.split('\n').pop() };
+  const [ahead, behind] = git(root, 'rev-list', '--left-right', '--count', 'HEAD...@{upstream}').out.split(/\s+/).map(Number);
+  if (!behind) return { state: 'current', ahead };
+  if (ahead) return { state: 'diverged', ahead, behind, upstream: up.out };
+  const dirty = git(root, 'status', '--porcelain', '--untracked-files=no').out; if (dirty) return { state: 'dirty', behind, files: dirty.split('\n').map(l => l.replace(/^\s*\S+\s+/, '')) };
+  const changed = git(root, 'diff', '--name-only', 'HEAD', '@{upstream}').out.split('\n');
+  return { state: 'behind', behind, upstream: up.out, log: git(root, 'log', '--no-decorate', '--format=%h %s', '-n', '20', 'HEAD..@{upstream}').out.split('\n'),
+    // Only these files change what install.sh would do, so the slow reinstall is skipped when none of them moved.
+    reinstall: changed.some(p => p === 'install.sh' || p === 'core/package-lock.json' || p === 'student/requirements.lock') };
+}
+/** Move this copy forward to what was fetched. Fast-forward only: it never merges and never discards anything. */
+export const applyUpgrade = (root = ROOT) => git(root, 'merge', '--ff-only', '--quiet', '@{upstream}');

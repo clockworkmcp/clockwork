@@ -53,10 +53,16 @@ It then:
 2. **Connects itself** to Clockwork over MCP and loads its instructions from [agent/SKILL.md](agent/SKILL.md).
 3. **Asks which sources you want** and walks you through the parts only you can do: scanning a WhatsApp code, logging
    in to an account, saving a token into a file. It never logs in for you and never sees your passwords.
-4. **Starts teaching.** It labels what comes in on a schedule, and reports back what is running.
+4. **Arranges to be woken and starts teaching.** It subscribes to Clockwork's alerts, labels what comes in on a
+   schedule, and reports back what is running.
 
-The agent follows the same steps on every machine, and they are written down in [agent/INSTALL.md](agent/INSTALL.md)
-if you want to read them first.
+The agent is told not to call the install finished until all of that is true: a feed delivering, itself connected,
+its wake-ups arranged, labelling under way. `clockwork status` shows the same checklist, so you can see what is
+missing. The steps are written down in [agent/INSTALL.md](agent/INSTALL.md) if you want to read them first.
+
+**Want to see it work before linking an account?** After the install, `clockwork demo` runs a throwaway copy with
+made-up messages. Connect your agent to it, watch it label, and see it woken when a message from the made-up school
+office arrives. Nothing in it is real and it does not touch your real setup.
 
 **If your agent runs in its vendor's cloud** (ChatGPT dots, Grok Bot, Claude Duet), it cannot reach your machine by
 itself. Clockwork still runs on your machine; you add a tunnel so the agent can reach it. If the agent can run
@@ -87,7 +93,9 @@ clockwork doctor              # every line should say ok
 clockwork start               # run now and at every login
 clockwork connect whatsapp    # link accounts one at a time; `clockwork extractors` lists all sixteen
 clockwork agent               # the MCP address, where the agent's token is, and the skill file
-clockwork status              # what is running and how far each source's model has got
+clockwork status              # what is running, what setup still needs, and how far each source's model has got
+clockwork demo                # optional: a throwaway copy with made-up messages, to try with your agent first
+clockwork upgrade             # later: fetch the newest version (shows what is new and asks first)
 ```
 
 Then connect your agent: [docs/CONNECT.md](docs/CONNECT.md). Full steps: [docs/LOCAL.md](docs/LOCAL.md).
@@ -216,6 +224,7 @@ you. The contract and manifest format are in [docs/EXTRACTORS.md](docs/EXTRACTOR
 | Write or add an extractor | [docs/EXTRACTORS.md](docs/EXTRACTORS.md) |
 | Understand how an item is decided, tokens, alerts and heads-ups | [docs/REFERENCE.md](docs/REFERENCE.md) |
 | Know the risks to your accounts before linking them | [docs/RISKS.md](docs/RISKS.md) |
+| See what changed between versions | [CHANGELOG.md](CHANGELOG.md) |
 | Report a security problem | [SECURITY.md](SECURITY.md) |
 
 ## Development

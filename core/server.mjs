@@ -12,6 +12,7 @@ import { createOAuth } from './oauth.mjs';
 import { loadRules, saveRules } from './headsup.mjs';
 
 const PORT = Number(process.env.CLOCKWORK_PORT || 4600);
+const VERSION = JSON.parse(fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 // Three credentials with separate powers, so the least trusted holder gets the least access:
 //   admin  (CLOCKWORK_TOKEN)        everything
 //   agent  (CLOCKWORK_AGENT_TOKEN)  POST /mcp only: read queues, send corrections as "agent"; label items when it is the teacher
@@ -200,14 +201,17 @@ export function createApp(store, { token = TOKEN, tokens = token === TOKEN ? TOK
       inputSchema: { type: 'object', properties: { days: { type: 'number' } } }, run: a => store.quality(Math.max(1, Math.min(Number(a.days) || 30, 365))) },
     { name: 'record_feedback', description: 'Raise or lower an item between urgent and later on the user\'s behalf. Recorded as an agent correction. Marking items ignore is reserved for the user.',
       inputSchema: { type: 'object', properties: { id: { type: 'string' }, bucket: { type: 'string', enum: ['urgent', 'later'] }, note: { type: 'string' } }, required: ['id', 'bucket'] }, run: a => feedback(a, 'agent') },
+    { name: 'get_setup_status', description: 'Whether Clockwork is fully set up, step by step: at least one feed delivering, you connected, wake-ups arranged for urgent and heads-up items (event subscriptions, or polling where your platform has no events), and labelling under way. Call it when you first connect and after each setup step. Setup is not finished, and should not be reported to the user as finished, until `finished` is true; `next` says what to do now.',
+      inputSchema: { type: 'object', properties: {} }, run: () => setupStatus() },
     ...(agentTeaches ? teachingTools : []),
   ];
-  const INFO = { name: 'clockwork', version: '0.2.0' }, CAPS = { tools: {}, events: {} };
+  const INFO = { name: 'clockwork', version: VERSION }, CAPS = { tools: {}, events: {} };
+  const INSTRUCTIONS = 'Clockwork sorts this user\'s incoming messages. When you first connect, call get_setup_status and finish every step it lists: setup is not done until feeds are delivering, you are subscribed to (or polling for) urgent and heads-up items, and you label on a schedule. ' + NOTICE;
   async function mcp(msg, role = 'admin') {
     const reply = result => ({ jsonrpc: '2.0', id: msg.id, result });
     const guarded = async fn => { try { return reply(await fn()); } catch (e) { if (!e.rpc) log(`error mcp ${msg.method}: ${e.message}`); return { jsonrpc: '2.0', id: msg.id, error: e.rpc || { code: -32603, message: 'internal error' } }; } };
     switch (msg.method) {
-      case 'initialize': return reply({ protocolVersion: msg.params?.protocolVersion || '2025-06-18', capabilities: CAPS, serverInfo: INFO });
+      case 'initialize': return reply({ protocolVersion: msg.params?.protocolVersion || '2025-06-18', capabilities: CAPS, serverInfo: INFO, instructions: INSTRUCTIONS });
       case 'server/discover': return reply({ supportedVersions: ['2026-07-28'], capabilities: CAPS, serverInfo: INFO });
       case 'events/list': return reply(events.definitions());
       case 'events/subscribe': return guarded(() => events.subscribe(msg.params, role));
@@ -218,6 +222,8 @@ export function createApp(store, { token = TOKEN, tokens = token === TOKEN ? TOK
       case 'tools/call': {
         const t = tools.find(x => x.name === msg.params?.name);
         if (!t) return { jsonrpc: '2.0', id: msg.id, error: { code: -32602, message: 'unknown tool' } };
+        if (role === 'agent') { const now = Date.now(); store.kv.set('agent:last:call', now); store.kv.set('agent:last:' + t.name, now); } // for get_setup_status
+        if (t.name === 'get_setup_status') return reply({ content: [{ type: 'text', text: JSON.stringify(setupStatus(role)) }] });
         try { return reply({ content: [{ type: 'text', text: JSON.stringify(await t.run(msg.params.arguments || {})) }] }); }
         catch (e) { return reply({ content: [{ type: 'text', text: e.message }], isError: true }); }
       }
@@ -243,8 +249,34 @@ export function createApp(store, { token = TOKEN, tokens = token === TOKEN ? TOK
     }
     return { checkedAt: new Date().toISOString(), lastTriage: last, sources: h };
   }
+  // Is setup finished? An install that stops after "it runs" leaves the user with nothing: feeds must be delivering, the agent
+  // must be connected, it must have arranged to be woken (or to poll), and it must have started labelling.
+  const seen = name => Number(store.kv.get('agent:last:' + name) || 0), DAY_MS = 24 * 3600e3;
+  function setupStatus(role = 'admin') {
+    const now = Date.now(), src = sourceHealth().sources, names = Object.keys(src), live = names.filter(s => String(src[s].status).startsWith('connected'));
+    const lastCall = role === 'agent' ? now : seen('call');
+    const subs = events.list().filter(s => !s.expired), sub = n => subs.find(s => s.event === n);
+    const wake = (event, poll) => { const s = sub(event); return s ? (s.failing ? { ok: false, how: `subscribed to ${event}, but deliveries are failing (${clean(s.failing, 60)})` } : { ok: true, how: `subscribed to ${event}` })
+      : now - seen(poll) < DAY_MS ? { ok: true, how: `polling ${poll}` } : { ok: false, how: `not subscribed to ${event} and not polling ${poll}` }; };
+    const kinds = [wake('urgent_item', 'get_urgent_updates'), ...(agentTeaches ? [wake('heads_up_item', 'get_heads_up_updates')] : [])];
+    const labelled = store.db.prepare(`SELECT COUNT(DISTINCT event_id) n FROM labels WHERE source='agent'`).get().n;
+    const waiting = store.stats().decisions.filter(d => d.stage === 'pending_agent').reduce((a, d) => a + d.n, 0);
+    const steps = [
+      { step: 'feeds', done: live.length > 0, detail: live.length ? `delivering: ${live.join(', ')}` : names.length ? `linked but not delivering: ${names.map(s => `${s} (${clean(src[s].status, 40)})`).join(', ')}` : 'no feed has reported in yet',
+        todo: 'Ask the user which feeds they want. On the machine Clockwork runs on, run `clockwork connect <name>` for each and relay what it asks of the user. Check with get_source_health until one is connected.' },
+      { step: 'agent_connected', done: lastCall > 0, detail: lastCall ? (role === 'agent' ? 'you are connected' : `the agent last called a tool at ${new Date(lastCall).toISOString()}`) : 'no agent has called a tool yet',
+        todo: 'Add Clockwork to your MCP servers (`clockwork agent` prints the address and where the token is) and call a tool through that connection, not through a shell command.' },
+      { step: 'wake_ups', done: kinds.every(k => k.ok), detail: kinds.map(k => k.how).join('; '),
+        todo: `Subscribe to the MCP events urgent_item${agentTeaches ? ' and heads_up_item' : ''}. If your platform cannot subscribe to MCP events, schedule a check every few minutes that calls get_urgent_updates${agentTeaches ? ' and get_heads_up_updates' : ''} with the cursor from last time, and tell the user that alerts will be that much slower.` },
+      ...(agentTeaches ? [{ step: 'labelling', done: labelled > 0 || (waiting === 0 && seen('get_items_to_label') > 0), detail: `${labelled} item(s) labelled by the agent, ${waiting} waiting`,
+        todo: 'Schedule your recurring check (every 10 to 15 minutes): call get_items_to_label and answer with submit_labels. Run it once now.' }] : []),
+    ];
+    const open = steps.filter(s => !s.done);
+    return { finished: !open.length, steps: steps.map(({ todo, ...s }) => (s.done ? s : { ...s, todo })), next: open[0]?.todo ?? 'Setup is finished. Carry on with your regular jobs.' };
+  }
   const routes = {
     'GET /health': () => ({ ok: true }),
+    'GET /setup': () => setupStatus(),
     'GET /sources': () => sourceHealth(),
     'GET /quality': (_, url) => store.quality(Math.max(1, Math.min(Number(url.searchParams.get('days')) || 30, 365))),
     // Chat names from a connector (group titles): { source, chats: [{ threadId, name }] }
@@ -324,7 +356,7 @@ export function createApp(store, { token = TOKEN, tokens = token === TOKEN ? TOK
       send(out === null ? 202 : 200, out, role);
     } catch (e) { send(e.status || 500, { error: e.status ? e.message : 'internal error' }, role); if (!e.status) log(`error ${url.pathname}: ${e.message}`); }
   });
-  return { server, kick, digest, notifyUrgent, trainingStatus, events, mcp, oauth };
+  return { server, kick, digest, notifyUrgent, trainingStatus, events, mcp, oauth, setupStatus };
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

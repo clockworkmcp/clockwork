@@ -2,7 +2,7 @@
 // The `clockwork` command: set up, run and inspect one local Clockwork instance, and manage its extractors.
 import { spawn, spawnSync } from 'node:child_process'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import readline from 'node:readline/promises';
 import { ROOT, LABEL, NAME, paths, dataDir, loadConfig, saveConfig, initConfig, coreUrl, listExtractors, findExtractor, resolveExtractor, manifestProblems,
-  plist, plistPath, readState, supervisorAlive, python, writePrivate } from './lib.mjs';
+  plist, plistPath, readState, supervisorAlive, python, writePrivate, version, commitOf, upgradeState, applyUpgrade } from './lib.mjs';
 
 const HELP = `clockwork: personal feed triage that runs on your own machine
 
@@ -12,6 +12,9 @@ const HELP = `clockwork: personal feed triage that runs on your own machine
   clockwork status               what is running, what each source last saw, how training is going
   clockwork logs <name>          recent output of one part (core, scorer, trainer or an extractor)
   clockwork doctor               check that everything needed is installed
+  clockwork version              which version this is
+  clockwork upgrade [--check]    fetch the newest Clockwork and restart (shows what is new and asks first)
+  clockwork demo                 a throwaway copy with made-up messages, to try with your agent before linking any account
 
   clockwork extractors           list extractors and whether each is on
   clockwork connect <name>       switch an extractor on and link its account (whatsapp, gmail, x, ...)
@@ -101,6 +104,9 @@ const commands = {
       const rows = Object.entries(tr.sources || {}).map(([s, v]) => { const n = Object.values(v.labels || {}).reduce((x, y) => x + y, 0), m = v.localModel, live = v.liveCheck;
         return [s, n, v.waitingForLabel, typeof m === 'string' ? m : `agrees ${Math.round((m.heldOutAgreement ?? 0) * 100)}% on held-out labels`,
           live ? (live.decidesAlone ? 'decides what it is sure of' : `shadow: ${live.confidentPredictions} of ${live.needed.confidentPredictions} confident calls checked${live.agreement == null ? '' : `, ${Math.round(live.agreement * 100)}% matched (needs ${Math.round(live.needed.agreement * 100)}%)`}`) : '']; });
+      const setup = await api(c, '/setup').catch(() => null);
+      if (setup) { console.log(`\nSetup ${setup.finished ? 'is finished' : 'is NOT finished'}`); table(setup.steps.map(s => [s.done ? 'ok  ' : 'TODO', s.step.replace('_', ' '), s.detail]));
+        if (!setup.finished) console.log(`  Next (for your agent): ${setup.next}`); }
       if (rows.length) { console.log(`\nTraining (labels from ${tr.teacher === 'agent' ? 'your agent' : 'the built-in teacher'}; a source needs ${tr.labelsNeededPerSource} to train)`); table([['source', 'labels', 'waiting', 'local model', 'mode'], ...rows]); }
     } catch (e) { console.log(`\nThe core is not answering yet (${e.message}). See: clockwork logs core`); }
   },
@@ -123,6 +129,29 @@ const commands = {
     }
     console.log(bad ? `\n${bad} thing(s) to fix.` : '\nEverything needed is in place.'); process.exitCode = bad ? 1 : 0;
   },
+
+  async version() { const h = commitOf(); console.log(`Clockwork ${version()}${h ? ` (${h})` : ''}`); },
+  /** Newer Clockwork from where this copy was cloned. Nothing is fetched or changed unless this is run. */
+  async upgrade() {
+    const st = upgradeState(), here = `git -C ${ROOT}`;
+    if (st.state === 'not-git') die(`This copy of Clockwork is not a git checkout, so there is nothing to fetch from. Clone it again and run ./install.sh; your data in ${dataDir()} is kept.`);
+    if (st.state === 'no-upstream') die(`This checkout does not follow a published branch. Switch to one first, for example: ${here} switch main`);
+    if (st.state === 'offline') die(`Could not reach the place this was cloned from (${st.error}).`);
+    if (st.state === 'current') return console.log(`Clockwork ${version()} is the newest version.${st.ahead ? ` (This copy has ${st.ahead} change(s) of its own on top.)` : ''}`);
+    if (st.state === 'diverged') die(`This copy and the published one have gone separate ways (${st.ahead} change(s) only here, ${st.behind} only there): either you committed changes here, or the published history was rewritten.\nTo take the published version and drop the changes that exist only here:\n  ${here} reset --hard ${st.upstream}\n  ${path.join(ROOT, 'install.sh')}\nYour data in ${dataDir()} is not touched by that.`);
+    if (st.state === 'dirty') die(`There are ${st.behind} newer change(s), but files in this copy were edited: ${st.files.slice(0, 5).join(', ')}.\nUndo or commit those edits, then run this again.`);
+    console.log(`${st.behind} newer change(s) since ${version()}:`); for (const l of st.log) console.log('  ' + l); if (st.behind > st.log.length) console.log('  ...');
+    console.log('What changed for you is described in CHANGELOG.md after the upgrade.');
+    if (process.argv.includes('--check')) return;
+    if (!await ask('Upgrade now?')) die('Left as it was.');
+    const m = applyUpgrade(); if (!m.ok) die(`Could not move to the new version: ${m.err.split('\n').pop()}`);
+    if (st.reinstall && spawnSync('sh', [path.join(ROOT, 'install.sh')], { stdio: 'inherit', env: { ...process.env, CLOCKWORK_DATA: dataDir() } }).status !== 0) die('The new version is in place but its install step failed. Fix what it reports and run ./install.sh');
+    const now = JSON.parse(fs.readFileSync(path.join(ROOT, 'core', 'package.json'), 'utf8')).version;
+    if (!supervisorAlive()) return console.log(`Now at ${now}. Start it with: clockwork start`);
+    if (process.platform === 'darwin' && fs.existsSync(plistPath()) && launchctl('kickstart', '-k', `${domain()}/${LABEL}`).status === 0) return console.log(`Now at ${now}, and restarted. See: clockwork status`);
+    console.log(`Now at ${now}. It is still running the old version: stop it and start it again.`);
+  },
+  async demo() { const { demo } = await import('./demo.mjs'); await demo(); },
 
   async extractors() {
     const c = need(), st = supervisorAlive() ? readState() : null;
@@ -236,7 +265,8 @@ const commands = {
 Give the skill file to your agent (for OpenClaw: copy the agent/ folder into its skills folder as "clockwork").
 The agent token can read your items and label them, and choose which messages wake it as they arrive.
 It cannot change other settings or add extractors.
-Only connect an agent that asks you before it sends messages or posts on your behalf.`);
+Only connect an agent that asks you before it sends messages or posts on your behalf.
+Setup is finished when your agent's get_setup_status tool says so; clockwork status shows the same list.`);
     if (c.publicUrl) console.log(`\nAgents outside this machine (ChatGPT): add ${c.publicUrl}/mcp with OAuth; approve with the admin token in ${paths.config()}.`);
     else console.log('\nFor an agent that runs somewhere else (ChatGPT), see "Reaching Clockwork from outside" in docs/LOCAL.md.');
   },
@@ -250,7 +280,7 @@ Only connect an agent that asks you before it sends messages or posts on your be
   async help() { console.log(HELP); },
 };
 
-const [cmd = 'help', ...rest] = process.argv.slice(2).filter(a => a !== '--yes' && !a.startsWith('--seconds='));
+const [cmd = 'help', ...rest] = process.argv.slice(2).filter(a => !a.startsWith('--') || a === '--help');
 const fn = commands[cmd === '--help' || cmd === '-h' ? 'help' : cmd];
 if (!fn) die(`Unknown command "${cmd}".\n\n${HELP}`);
 fn(...rest).catch(e => die(e.message));

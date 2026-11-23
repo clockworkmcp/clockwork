@@ -134,3 +134,51 @@ test('supervisor: runs an enabled extractor against the core, picks up enable/di
   } finally { child.kill('SIGTERM'); await new Promise(r => child.on('exit', r)); core.close(); }
   assert.equal(lib.supervisorAlive(), 0);
 });
+
+test('upgrade: sees newer published changes, moves forward only by fast-forward, and refuses when this copy was edited or has diverged', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-up-')), origin = path.join(tmp, 'origin.git'), author = path.join(tmp, 'author'), copy = path.join(tmp, 'copy');
+  const git = (cwd, ...a) => { const r = spawnSync('git', ['-C', cwd, '-c', 'user.name=t', '-c', 'user.email=t@example.com', '-c', 'commit.gpgsign=false', ...a], { encoding: 'utf8' }); assert.equal(r.status, 0, a.join(' ') + ': ' + r.stderr); return r.stdout.trim(); };
+  const publish = (file, text, msg) => { fs.writeFileSync(path.join(author, file), text); git(author, 'add', '-A'); git(author, 'commit', '-q', '-m', msg); git(author, 'push', '-q', 'origin', 'HEAD:main'); };
+  try {
+    fs.mkdirSync(origin); git(origin, 'init', '-q', '--bare', '-b', 'main'); fs.mkdirSync(author); git(author, 'init', '-q', '-b', 'main'); git(author, 'remote', 'add', 'origin', origin);
+    publish('a.txt', 'one', 'first'); git(tmp, 'clone', '-q', origin, copy);
+    assert.equal(lib.upgradeState(tmp).state, 'not-git', 'a folder that is not the top of a checkout');
+    assert.equal(lib.upgradeState(copy).state, 'current');
+    publish('a.txt', 'two', 'second change'); publish('install.sh', '#!/bin/sh', 'installer changed');
+    let st = lib.upgradeState(copy); assert.equal(st.state, 'behind'); assert.equal(st.behind, 2); assert.match(st.log.join('\n'), /second change/); assert.equal(st.reinstall, true);
+    assert.equal(fs.readFileSync(path.join(copy, 'a.txt'), 'utf8'), 'one', 'looking changes nothing');
+    fs.writeFileSync(path.join(copy, 'a.txt'), 'edited here'); st = lib.upgradeState(copy); assert.equal(st.state, 'dirty'); assert.deepEqual(st.files, ['a.txt']);
+    git(copy, 'checkout', '-q', '--', 'a.txt');
+    assert.ok(lib.applyUpgrade(copy).ok); assert.equal(fs.readFileSync(path.join(copy, 'a.txt'), 'utf8'), 'two'); assert.equal(lib.upgradeState(copy).state, 'current');
+    publish('b.txt', 'x', 'docs only'); assert.equal(lib.upgradeState(copy).reinstall, false, 'no reinstall when no dependency file moved'); assert.ok(lib.applyUpgrade(copy).ok);
+    // Published history rewritten (or local commits): never merged or reset for the user.
+    git(author, 'commit', '-q', '--amend', '-m', 'rewritten'); git(author, 'push', '-q', '--force', 'origin', 'HEAD:main');
+    st = lib.upgradeState(copy); assert.equal(st.state, 'diverged'); assert.ok(!lib.applyUpgrade(copy).ok, 'a fast-forward is impossible, so nothing moves');
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('version: one number, shared by the command, the core and the changelog', () => {
+  const v = lib.version(); assert.match(v, /^\d+\.\d+\.\d+$/); assert.match(cw('version').stdout, new RegExp(`^Clockwork ${v.replaceAll('.', '\\.')}`));
+  assert.match(fs.readFileSync(path.join(lib.ROOT, 'CHANGELOG.md'), 'utf8'), new RegExp(`^## ${v.replaceAll('.', '\\.')} `, 'm'), 'the changelog has an entry for this version');
+});
+
+test('demo: made-up messages reach a connected agent, a heads-up fires, and the real install is left alone', { skip: !fs.existsSync(path.join(lib.ROOT, 'core', 'node_modules')) }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-demo-')), port = 4700 + Math.floor(Math.random() * 200), before = fs.readFileSync(lib.paths.config(), 'utf8');
+  const child = spawn(process.execPath, [CLI, 'demo', '--every=1'], { env: { ...process.env, CLOCKWORK_DATA: DATA, CLOCKWORK_DEMO_DATA: dir, CLOCKWORK_DEMO_PORT: String(port) }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let out = ''; child.stdout.on('data', d => out += d); child.stderr.on('data', d => out += d);
+  const until = async (fn, ms = 20000) => { const end = Date.now() + ms; while (Date.now() < end) { if (await fn()) return true; await new Promise(r => setTimeout(r, 200)); } return false; };
+  try {
+    assert.ok(await until(() => /made-up message\(s\) so far/.test(out)), 'the demo started: ' + out);
+    const token = fs.readFileSync(path.join(dir, 'agent-token'), 'utf8').trim(); assert.ok(!out.includes(token), 'the token is never printed');
+    const tool = async (name, args = {}) => JSON.parse((await (await fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result.content[0].text);
+    let s = await tool('get_setup_status'); assert.equal(s.finished, false); assert.equal(s.steps.find(x => x.step === 'feeds').done, true);
+    const items = (await tool('get_items_to_label')).items; assert.ok(items.length >= 5);
+    assert.ok((await tool('get_heads_up_updates')).items.some(i => /School office/.test(i.headsUpWhy)), 'the school message raised a heads-up');
+    await tool('get_urgent_updates'); await tool('submit_labels', { labels: [{ id: items[0].id, bucket: 'later', reason: 'made up' }] });
+    assert.equal((await tool('get_setup_status')).finished, true);
+    assert.ok(await until(() => /Setup is finished/.test(out)), 'the demo says so when the agent has done everything');
+    assert.equal(fs.readFileSync(lib.paths.config(), 'utf8'), before, 'the real config is untouched'); assert.ok(!fs.existsSync(path.join(DATA, 'clockwork.db')));
+  } finally { child.kill('SIGTERM'); await new Promise(r => child.on('exit', r)); fs.rmSync(dir, { recursive: true, force: true }); }
+  assert.ok(await until(() => fetch(`http://127.0.0.1:${port}/health`).then(() => false, () => true), 5000), 'stopping the demo stops its core');
+});

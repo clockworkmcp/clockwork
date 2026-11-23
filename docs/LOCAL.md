@@ -23,6 +23,12 @@ clockwork start
 creates the config with fresh access tokens. It installs nothing system-wide and asks for no password.
 `clockwork start` runs the service now and at every login. `clockwork doctor` checks an install.
 
+To try it before linking any account, `clockwork demo` runs a throwaway copy with made-up messages on port 4610.
+
+To update later: `clockwork upgrade` fetches the newest version from where you cloned it, lists what is new, asks, and
+restarts the service. `clockwork upgrade --check` only looks, and `clockwork version` shows what you have. Nothing is
+ever fetched unless you run it. What changed is in [CHANGELOG.md](../CHANGELOG.md).
+
 ## Link your accounts
 
 Each of these tells you what to do yourself. Clockwork never sees a password.
@@ -95,6 +101,8 @@ clockwork agent
 
 prints the MCP address, where the agent's token is stored, and the skill file to give your agent (`agent/SKILL.md`). The
 agent is the teacher: it labels what Clockwork collects, and a small model on your machine learns to do the same.
+Setup is finished when the agent's `get_setup_status` tool says so: a feed delivering, the agent connected, its
+wake-ups arranged and labelling started. `clockwork status` shows the same checklist.
 Steps for OpenClaw, Hermes Agent, ChatGPT dots, Grok Bot and Claude Duet are in [CONNECT.md](CONNECT.md).
 
 **The first day.** Every source starts in shadow mode: the model predicts and decides nothing. Have your agent label the

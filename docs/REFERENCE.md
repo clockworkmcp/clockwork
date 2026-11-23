@@ -161,6 +161,11 @@ Set `CLOCKWORK_TZ` (an IANA name such as `Europe/Paris`) so times written in mes
 
 ## Health, alert quality and thread context
 
+- `GET /setup` (agent tool `get_setup_status`): whether setup is finished, as four steps: a feed delivering, the agent
+  connected (it has called a tool with the agent role), wake-ups arranged (a working subscription to `urgent_item` and
+  `heads_up_item`, or each polled in the last day), and labelling under way. Each open step carries what to do; `next` is
+  the first of them. `clockwork status` prints it. The MCP `initialize` answer tells a connecting agent to call it.
+
 - `GET /sources` (agent tool `get_source_health`): per source, when its connector last reported in, when the last new item arrived,
   how late items arrive (median and 90th percentile, last 24 hours), and what is still waiting. Connectors send a heartbeat even
   with nothing new (`POST /ingest/events` with an empty list and a `status`), so "connected, nothing new" is distinct from
