@@ -21,7 +21,7 @@ test('init creates private config and tokens once, and never prints a token', ()
 
 test('built-in extractors are valid, off by default, and the template is not listed', () => {
   const xs = lib.listExtractors(lib.loadConfig());
-  assert.deepEqual(xs.filter(x => x.builtin).map(x => x.name).sort(), ['bluesky', 'calendar', 'discord', 'github', 'gitlab', 'gmail', 'hackernews', 'imessage', 'jira', 'linear', 'mastodon', 'outlook', 'rss', 'slack', 'whatsapp', 'x']);
+  assert.deepEqual(xs.filter(x => x.builtin).map(x => x.name).sort(), ['bluesky', 'calendar', 'discord', 'github', 'gitlab', 'gmail', 'gmail-imap', 'hackernews', 'imessage', 'jira', 'linear', 'mastodon', 'outlook', 'rss', 'slack', 'whatsapp', 'x']);
   for (const x of xs) { assert.deepEqual(x.problems, [], x.name); assert.equal(x.enabled, false); }
 });
 

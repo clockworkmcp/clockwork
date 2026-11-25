@@ -1,0 +1,10 @@
+{
+  "name": "gmail-imap",
+  "source": "gmail",
+  "description": "Your Gmail, read over IMAP with an app password: no Google Cloud project needed. Read-only: the mailbox is opened for reading and nothing is ever sent, moved, deleted or marked as read.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/login.json", "help": "Make an app password at https://myaccount.google.com/apppasswords (your account needs 2-Step Verification). Save it in that file as { \"address\": \"you@gmail.com\", \"appPassword\": \"abcd efgh ijkl mnop\" } and run chmod 600 on the file. Never use your normal Google password. An app password can do far more than read mail, so read extractors/gmail-imap/README.md first." }],
+  "ready": { "file": "{extractorData}/login.json" },
+  "connect": { "type": "command", "command": "node", "args": ["main.mjs", "verify"], "note": "Signing in to Gmail once to check the app password. Use this or the `gmail` extractor, not both: they read the same mail." },
+  "restartSeconds": 60
+}

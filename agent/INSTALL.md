@@ -105,6 +105,7 @@ and relay exactly what it says. Each needs something only the user can do:
 |---|---|
 | WhatsApp | scans a QR code with their phone |
 | Gmail | creates their own Google OAuth client, saves its file where `connect` says, approves access in the browser |
+| Gmail, quicker (`gmail-imap`) | makes a Google app password and saves it where `connect` says. Tell them first that an app password can also send and delete mail, and that only the program keeps it to reading; offer it when the OAuth client is too much, not by default |
 | Slack | creates a Slack app from `extractors/slack/slack-app.json`, installs it, saves its user token in the file `connect` names |
 | X | logs in themself in the Chrome window that opens |
 | any other | what `connect` prints; the steps are in `extractors/<name>/README.md` |

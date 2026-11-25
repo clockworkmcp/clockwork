@@ -1,7 +1,7 @@
 # Extractors: wanted and available
 
-Built in: `whatsapp`, `gmail`, `slack`, `x`, `outlook`, `imessage`, `calendar`, `discord`, `github`, `gitlab`, `linear`,
-`jira`, `bluesky`, `mastodon`, `hackernews`, `rss`.
+Built in: `whatsapp`, `gmail`, `gmail-imap`, `slack`, `x`, `outlook`, `imessage`, `calendar`, `discord`, `github`, `gitlab`,
+`linear`, `jira`, `bluesky`, `mastodon`, `hackernews`, `rss`.
 
 ## Community extractors
 

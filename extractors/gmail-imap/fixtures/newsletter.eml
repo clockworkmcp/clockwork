@@ -1,0 +1,28 @@
+From: =?UTF-8?B?Q2Fmw6kgTHVtacOocmU=?= <news@cafe-lumiere.example>
+To: you@example.invalid
+Subject: =?UTF-8?Q?Our_winter_menu_is_here_=E2=9D=84?=
+List-Unsubscribe: <https://cafe-lumiere.example/unsubscribe>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="outer-1"
+
+--outer-1
+Content-Type: multipart/alternative; boundary="inner-1"
+
+--inner-1
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: quoted-printable
+
+New this month: chestnut soup and a caf=C3=A9 cr=C3=A8me you will not =
+forget. Book a table for the weekend.
+--inner-1
+Content-Type: text/html; charset=utf-8
+
+<html><body><p>New this month: chestnut soup.</p></body></html>
+--inner-1--
+--outer-1
+Content-Type: application/pdf; name="menu.pdf"
+Content-Disposition: attachment; filename="menu.pdf"
+Content-Transfer-Encoding: base64
+
+JVBERi0xLjQKbWFkZSB1cCBmb3IgdGhlIHRlc3QK
+--outer-1--

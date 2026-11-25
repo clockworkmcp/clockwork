@@ -91,7 +91,7 @@ git clone https://github.com/clockworkmcp/clockwork.git && cd clockwork
 ./install.sh                  # dependencies, config and the `clockwork` command; no password, nothing system-wide
 clockwork doctor              # every line should say ok
 clockwork start               # run now and at every login
-clockwork connect whatsapp    # link accounts one at a time; `clockwork extractors` lists all sixteen
+clockwork connect whatsapp    # link accounts one at a time; `clockwork extractors` lists all seventeen
 clockwork agent               # the MCP address, where the agent's token is, and the skill file
 clockwork status              # what is running, what setup still needs, and how far each source's model has got
 clockwork demo                # optional: a throwaway copy with made-up messages, to try with your agent first
@@ -165,13 +165,14 @@ Step-by-step instructions for each: [docs/CONNECT.md](docs/CONNECT.md).
 
 ## Sources
 
-An extractor is a folder with a manifest and a program that posts items to Clockwork. Sixteen are built in, all off
+An extractor is a folder with a manifest and a program that posts items to Clockwork. Seventeen are built in, all off
 until you connect them:
 
 | Source | What it brings in | You provide | Setup |
 |---|---|---|---|
 | WhatsApp | your chats | a scan with your phone | [docs/LOCAL.md](docs/LOCAL.md) |
 | Gmail | your inbox | your own Google client | [docs/LOCAL.md](docs/LOCAL.md) |
+| Gmail, with an app password | the same mail, with a quicker setup and a broader key | a Google app password | [extractors/gmail-imap](extractors/gmail-imap/README.md) |
 | Slack | conversations you are in | your own Slack app | [docs/LOCAL.md](docs/LOCAL.md) |
 | X | your home timeline | a login in a separate Chrome window | [docs/LOCAL.md](docs/LOCAL.md) |
 | Outlook mail | your Outlook or Microsoft 365 inbox | your own Microsoft app registration | [extractors/outlook](extractors/outlook/README.md) |
@@ -187,7 +188,7 @@ until you connect them:
 | Hacker News | replies to you, and your keywords | your username (no login) | [extractors/hackernews](extractors/hackernews/README.md) |
 | RSS / Atom | blogs, status pages, podcasts, YouTube channels, Reddit inbox feeds | feed addresses | [extractors/rss](extractors/rss/README.md) |
 
-WhatsApp, Gmail and X have run on real accounts. **The other thirteen have only been tested against
+WhatsApp, Gmail and X have run on real accounts. **The other fourteen have only been tested against
 stand-ins for the real service** (the feed reader and Hacker News also against the live, public services). Expect to
 find problems the first time one meets a real account, and please report them.
 

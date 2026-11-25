@@ -3,6 +3,13 @@
 What changed for someone running Clockwork, newest first. `clockwork version` shows what you have and
 `clockwork upgrade` moves you to the newest.
 
+## Unreleased
+
+- **Gmail with an app password.** `clockwork connect gmail-imap` reads Gmail over IMAP with a Google app password, so
+  there is no Google Cloud project to set up. An app password can do more than read, and only the program keeps it to
+  reading: see [extractors/gmail-imap/README.md](extractors/gmail-imap/README.md). It files mail under the same ids as
+  the `gmail` extractor, so you can switch between them. Not yet run against a real account.
+
 ## 0.2.0 (2026-11-18)
 
 First public version.

@@ -41,14 +41,14 @@ clockwork connect x           # log in to X in a separate Chrome window
 clockwork status
 ```
 
-`clockwork extractors` lists every source. Twelve more are built in, each with its own setup page:
-[Outlook mail](../extractors/outlook/README.md), [iMessage and SMS](../extractors/imessage/README.md),
+`clockwork extractors` lists every source. Thirteen more are built in, each with its own setup page:
+[Gmail with an app password](../extractors/gmail-imap/README.md), [Outlook mail](../extractors/outlook/README.md), [iMessage and SMS](../extractors/imessage/README.md),
 [calendar invitations](../extractors/calendar/README.md), [Discord](../extractors/discord/README.md),
 [GitHub](../extractors/github/README.md), [GitLab](../extractors/gitlab/README.md),
 [Linear](../extractors/linear/README.md), [Jira](../extractors/jira/README.md),
 [Bluesky](../extractors/bluesky/README.md), [Mastodon](../extractors/mastodon/README.md),
 [Hacker News](../extractors/hackernews/README.md) and [RSS / Atom feeds](../extractors/rss/README.md).
-`clockwork connect <name>` tells you what each one needs. These twelve and Slack have so far only been tested against
+`clockwork connect <name>` tells you what each one needs. These thirteen and Slack have so far only been tested against
 stand-ins for the real service.
 
 ### Gmail
@@ -61,6 +61,11 @@ Gmail needs an OAuth client of your own, because Clockwork has no central servic
    "unverified app" warning once when you approve it, which is expected because the app is yours.
 2. Create credentials of type "OAuth client ID", application type "Desktop app", and download the JSON file.
 3. Save it as `~/.clockwork/v2/gmail/client.json`, then run `clockwork connect gmail`.
+
+There is a quicker way that needs no Google Cloud project: `clockwork connect gmail-imap` signs in with a Google app
+password instead. The price is a broader key. Google's API access above can only read; an app password can also send
+and delete, and only the program keeps it to reading. It has also not met a real account yet. Read
+[extractors/gmail-imap/README.md](../extractors/gmail-imap/README.md) before you choose it, and use one of the two, not both.
 
 ### Slack
 
