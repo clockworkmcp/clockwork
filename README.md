@@ -180,7 +180,7 @@ until you connect them:
 | Calendar | new and changed invitations | your calendar's private feed address | [extractors/calendar](extractors/calendar/README.md) |
 | Discord | channels in servers your own bot is in | a bot token | [extractors/discord](extractors/discord/README.md) |
 | GitHub | your notifications | a personal access token | [extractors/github](extractors/github/README.md) |
-| GitHub repositories | issues, pull requests, comments, stars, forks and pushes on the repositories you list | nothing for a public repository; a read-only token for a private one | [extractors/github-repo](extractors/github-repo/README.md) |
+| GitHub repositories | issues, pull requests, comments, commits, stars and forks on the repositories you list | nothing for a public repository; a read-only token for a private one | [extractors/github-repo](extractors/github-repo/README.md) |
 | GitLab | your to-do list | a read-only token | [extractors/gitlab](extractors/gitlab/README.md) |
 | Linear | your inbox | a read-only API key | [extractors/linear](extractors/linear/README.md) |
 | Jira | issues you are assigned, reported or watch | an Atlassian API token | [extractors/jira](extractors/jira/README.md) |

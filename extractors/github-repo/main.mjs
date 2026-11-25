@@ -1,7 +1,7 @@
-// GitHub repository extractor: reads the public activity list of the repositories you name (issues, pull requests, comments,
-// reviews, stars, forks, pushes, releases) through GitHub's REST API and posts what is new to Clockwork.
-// Read-only by construction: every call to GitHub is a GET. It asks at most as often as GitHub's X-Poll-Interval header
-// allows and sends If-None-Match, so "nothing new" costs GitHub almost nothing.
+// GitHub repository extractor: what happens on the repositories you name, read through GitHub's REST API and posted to Clockwork.
+// Issues, pull requests, comments, commits, stars and forks are asked for directly, so they arrive within a pass. Releases,
+// reviews and new branches come from the repository's activity list, which GitHub says can run minutes to hours late.
+// Read-only by construction: every call to GitHub is a GET.
 import fs from 'node:fs'; import path from 'node:path';
 
 const CORE = process.env.CLOCKWORK_CORE_URL || 'http://127.0.0.1:4600';
@@ -29,7 +29,7 @@ const repos = () => repoList(process.env.CLOCKWORK_GITHUB_REPOS || readFile('rep
 const skipped = () => new Set(words(process.env.CLOCKWORK_GITHUB_REPO_SKIP || readFile('skip')).map(l => l.toLowerCase()));
 // A token is only needed for a private repository. Without one GitHub allows 60 calls an hour, so the pauses are longer.
 const token = () => process.env.CLOCKWORK_SECRET_TOKEN?.trim() || '';   // from the Keychain or the host's secret store, handed over by Clockwork; never read from a file
-const REST_S = () => num('CLOCKWORK_GITHUB_REST_SECONDS', token() ? 60 : 300);
+const REST_S = () => num('CLOCKWORK_GITHUB_REST_SECONDS', token() ? 60 : 900);   // about six calls a pass and repository
 
 /** Where GitHub's API is: github.com unless an address for GitHub Enterprise is given (https://HOSTNAME/api/v3). */
 function apiBase() {
@@ -103,21 +103,93 @@ async function fillTitle(tok, api, ev, titles) {
   const full = titles.get(u); if (full) Object.assign(pr, { title: full.title, html_url: pr.html_url || full.html_url, body: pr.body ?? full.body, merged: pr.merged ?? full.merged });
 }
 
-/** Everything new in one repository, oldest first. GitHub's list is not strictly in order and its ids do not only grow, so what
- *  was already read is remembered by id, not by position. Entries from before the first run's window are never sent. */
-async function readRepo(tok, api, repo, st, skip, first) {
-  const seen = new Set(st.seen || []), floor = Date.parse(st.floor || new Date(Date.now() - FIRST_S * 1000).toISOString());
-  const fresh = [], titles = new Map(); let etag = st.etag, pollS = 60;
+const item = (repo, sourceId, threadId, who, at, text, url, history) => ({ sourceId, threadId, author: who || 'github', authorName: who || 'GitHub', sourceTime: new Date(at).toISOString(),
+  direction: 'incoming', isGroup: true, kind: 'text', text: text.trim(), chatName: repo, origin: history ? 'history' : undefined, url });
+const said = (who, body) => cut(body) ? `\n\n${who}: ${cut(body)}` : '';
+const refuse = (r, repo, what) => {
+  if (r.status === 401) throw fail('github did not accept the token (http 401)', 'needs_login');
+  if (r.status === 403 || r.status === 404) throw fail(`github would not show ${repo} (http ${r.status}): a private repository needs a token that can read it`, 'needs_login');
+  if (!r.ok) throw fail(`github ${what} for ${repo}: http ${r.status}`);
+};
+/** Every page of a list, up to MAX_PAGES. */
+async function pages(tok, repo, what, url, headers) {
+  const out = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const r = await gh(tok, `${url}${url.includes('?') ? '&' : '?'}per_page=${PER_PAGE}&page=${page}`, headers); refuse(r, repo, what);
+    const list = await r.json(); if (!Array.isArray(list)) break; out.push(...list); if (list.length < PER_PAGE) break;
+  }
+  return out;
+}
+
+/** Issues, pull requests, comments, stars and forks, asked for directly, so they arrive within a pass of happening.
+ *  Ids are stable, so anything read twice (the passes overlap on purpose) is stored once by the core. */
+export async function readDirect(tok, api, repo, st, skip, first, floor) {
+  const web = webBase(api), home = `${web}/${repo}`, base = `${api}/repos/${repo}`, out = [];
+  const since = new Date(st.since ? Date.parse(st.since) - 120_000 : floor).toISOString(), now = new Date().toISOString(), q = `since=${encodeURIComponent(since)}`;
+  const after = t => t && Date.parse(t) >= Date.parse(since) && Date.parse(t) >= floor, ok = who => !skip.has(String(who || '').toLowerCase());
+  const add = (who, ...rest) => { if (ok(who)) out.push(item(repo, ...rest, first)); };
+  const r = await gh(tok, base); refuse(r, repo, 'repository'); const info = await r.json();
+
+  // Issues and pull requests that changed: opened, closed, merged, reopened.
+  const titles = new Map(), known = st.issues || {}, isPr = n => !!titles.get(n)?.pr;
+  for (const i of await pages(tok, repo, 'issues', `${base}/issues?state=all&sort=updated&direction=asc&${q}`)) {
+    if (!i?.number) continue; const pr = !!i.pull_request, kind = pr ? 'pull request' : 'issue', ref = `#${i.number} ${i.title || ''}`.trim(), thread = `${repo}#${i.number}`, url = i.html_url || `${home}/${pr ? 'pull' : 'issues'}/${i.number}`;
+    titles.set(i.number, { title: i.title, pr });
+    if (after(i.created_at)) add(i.user?.login, `${kind}:${i.id}:opened`, thread, i.user?.login, i.created_at, `[${kind} opened] ${ref}` + said(i.user?.login, i.body), url);
+    const merged = i.pull_request?.merged_at, by = i.closed_by?.login || null;   // the list does not say who closed it
+    if (i.state === 'closed' && after(i.closed_at)) add(i.closed_by?.login, `${kind}:${i.id}:closed:${i.closed_at}`, thread, by, i.closed_at, `[${kind} ${merged ? 'merged' : 'closed'}] ${ref}`, url);
+    if (i.state === 'open' && known[i.number] === 'closed') add(null, `${kind}:${i.id}:reopened:${i.updated_at}`, thread, null, i.updated_at, `[${kind} reopened] ${ref}`, url);
+    known[i.number] = i.state;
+  }
+  // Comments on issues and pull requests, then comments on lines of a pull request.
+  const numberOf = u => Number(/\/(?:issues|pulls)\/(\d+)$/.exec(u || '')?.[1]) || 0, ref = n => `#${n}${titles.get(n)?.title ? ' ' + titles.get(n).title : ''}`;
+  for (const c of await pages(tok, repo, 'comments', `${base}/issues/comments?sort=created&direction=asc&${q}`)) {
+    const n = numberOf(c.issue_url), pr = isPr(n) || /\/pull\/\d+/.test(c.html_url || ''); if (!c?.id || !after(c.created_at)) continue;
+    add(c.user?.login, `comment:${c.id}`, `${repo}#${n}`, c.user?.login, c.created_at, `[comment] on ${pr ? 'pull request' : 'issue'} ${ref(n)}` + said(c.user?.login, c.body), c.html_url || home);
+  }
+  for (const c of await pages(tok, repo, 'review comments', `${base}/pulls/comments?sort=created&direction=asc&${q}`)) {
+    const n = numberOf(c.pull_request_url); if (!c?.id || !after(c.created_at)) continue;
+    add(c.user?.login, `review-comment:${c.id}`, `${repo}#${n}`, c.user?.login, c.created_at, `[review comment] on pull request ${ref(n)}${c.path ? ` (${c.path})` : ''}` + said(c.user?.login, c.body), c.html_url || home);
+  }
+  // Commits on the main branch, each with the first line of its message.
+  for (const c of await pages(tok, repo, 'commits', `${base}/commits?${q}`)) {
+    const at = c.commit?.committer?.date || c.commit?.author?.date, who = c.author?.login || c.commit?.author?.name, branch = info.default_branch || 'main'; if (!c?.sha || !after(at)) continue;
+    add(c.author?.login, `commit:${c.sha}`, `${repo}:push:${branch}`, who, at, `[commit] ${String(c.commit?.message || '').split('\n')[0].slice(0, 200)}`, c.html_url || `${home}/commit/${c.sha}`);
+  }
+  // Stars and forks: only looked at when the repository's own count changed. A star carries the new total.
+  const stars = Number(info.stargazers_count) || 0, forks = Number(info.forks_count) || 0;
+  if (stars !== st.stars && stars > 0) {
+    const last = Math.max(1, Math.ceil(stars / PER_PAGE));
+    for (const page of last > 1 ? [last - 1, last] : [last]) {
+      const sr = await gh(tok, `${base}/stargazers?per_page=${PER_PAGE}&page=${page}`, { accept: 'application/vnd.github.star+json' }); refuse(sr, repo, 'stars');
+      for (const g of await sr.json().catch(() => [])) if (g?.user?.login && after(g.starred_at))
+        add(g.user.login, `star:${g.user.login}:${g.starred_at}`, `${repo}:stars`, g.user.login, g.starred_at, `[star] ${g.user.login} starred ${repo} (${stars} in all)`, g.user.html_url || `${web}/${g.user.login}`);
+    }
+  }
+  if (forks !== st.forks && forks > 0) {
+    const fr = await gh(tok, `${base}/forks?sort=newest&per_page=30`); refuse(fr, repo, 'forks');
+    for (const f of await fr.json().catch(() => [])) if (f?.id && after(f.created_at))
+      add(f.owner?.login, `fork:${f.id}`, `${repo}:forks`, f.owner?.login, f.created_at, `[fork] ${f.owner?.login} forked ${repo} to ${f.full_name}`, f.html_url || home);
+  }
+  const keep = Object.fromEntries(Object.entries(known).slice(-2000));
+  return { items: out.sort((a, b) => Date.parse(a.sourceTime) - Date.parse(b.sourceTime)), since: now, stars, forks, issues: keep };
+}
+
+// What readDirect already brings; the activity list is only used for the rest (releases, reviews, new branches).
+const DIRECT = new Set(['IssuesEvent', 'IssueCommentEvent', 'PullRequestEvent', 'PullRequestReviewCommentEvent', 'WatchEvent', 'ForkEvent', 'PushEvent']);
+
+/** The rest, from GitHub's activity list, oldest first. That list can run minutes to hours late, is not strictly in order and its
+ *  ids do not only grow, so what was already read is remembered by id, not by position. */
+async function readEvents(tok, api, repo, st, skip, first, floor) {
+  const seen = new Set(st.seen || []), fresh = [], titles = new Map(); let etag = st.etag, pollS = 60;
   for (let page = 1; page <= MAX_PAGES; page++) {
     const r = await gh(tok, `${api}/repos/${repo}/events?per_page=${PER_PAGE}&page=${page}`, page === 1 && st.etag ? { 'if-none-match': st.etag } : {});
     if (page === 1) { const p = r.headers.get('x-poll-interval'); pollS = p === null ? 60 : Math.max(0, Number(p) || 0); etag = r.headers.get('etag') || etag; }
     if (r.status === 304) break;
-    if (r.status === 401) throw fail('github did not accept the token (http 401)', 'needs_login');
-    if (r.status === 403 || r.status === 404) throw fail(`github would not show ${repo} (http ${r.status}): a private repository needs a token that can read it`, 'needs_login');
-    if (!r.ok) throw fail(`github activity for ${repo}: http ${r.status}`);
+    refuse(r, repo, 'activity');
     const list = await r.json(); if (!Array.isArray(list)) break;
     let unseen = 0;
-    for (const ev of list) { if (!ev?.id || !ev.created_at || seen.has(String(ev.id))) continue; seen.add(String(ev.id)); unseen++; if (Date.parse(ev.created_at) >= floor) fresh.push(ev); }
+    for (const ev of list) { if (!ev?.id || !ev.created_at || seen.has(String(ev.id))) continue; seen.add(String(ev.id)); unseen++; if (Date.parse(ev.created_at) >= floor && !DIRECT.has(ev.type)) fresh.push(ev); }
     if (list.length < PER_PAGE || (!first && !unseen)) break;   // after the first run, a page with nothing new means the rest is known too
   }
   const items = [];
@@ -126,7 +198,14 @@ async function readRepo(tok, api, repo, st, skip, first) {
     ev.repo = { ...ev.repo, name: ev.repo?.name || repo }; await fillTitle(tok, api, ev, titles);
     const it = toItem(ev, webBase(api), first); if (it) items.push(it);
   }
-  return { items, etag, pollS, seen: [...seen].slice(-1000), floor: new Date(floor).toISOString() };   // GitHub keeps about 300 entries
+  return { items, etag, pollS, seen: [...seen].slice(-1000) };   // GitHub keeps about 300 entries
+}
+
+/** Everything new in one repository. Nothing from before the first run's window is ever sent. */
+async function readRepo(tok, api, repo, st, skip, first) {
+  const floor = Date.parse(st.floor || new Date(Date.now() - FIRST_S * 1000).toISOString());
+  const d = await readDirect(tok, api, repo, st, skip, first, floor), e = await readEvents(tok, api, repo, st, skip, first, floor);
+  return { items: [...d.items, ...e.items].sort((a, b) => Date.parse(a.sourceTime) - Date.parse(b.sourceTime)), keep: { since: d.since, stars: d.stars, forks: d.forks, issues: d.issues, etag: e.etag, seen: e.seen, floor: new Date(floor).toISOString() }, pollS: e.pollS };
 }
 
 async function pass() {
@@ -141,7 +220,7 @@ async function pass() {
       const got = await readRepo(tok, api, repo, st, skip, !st.started);
       for (let i = 0; i < got.items.length; i += 200) await send(got.items.slice(i, i + 200));
       // Only now, with the items accepted by the core, remember the place.
-      Object.assign(st, { etag: got.etag, seen: got.seen, floor: got.floor, started: true, pollAfter: Date.now() + got.pollS * 1000, status: 'ok' }); sent += got.items.length;
+      Object.assign(st, { ...got.keep, started: true, pollAfter: Date.now() + got.pollS * 1000, status: 'ok' }); sent += got.items.length;
     } catch (e) {
       st.status = e.status || 'error'; worst = st.status; console.error(`${repo}: ${e.message}`);
       st.pollAfter = Date.now() + (e.status === 'rate_limited' ? Math.min(3600, e.waitS) : e.status === 'needs_login' ? 600 : 60) * 1000;
@@ -155,8 +234,9 @@ async function pass() {
 
 if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('/main.mjs')) {
   for (;;) {
-    try { await pass(); } catch (e) { console.error('failed:', e.message); await send([], e.status || 'error').catch(() => {}); }
+    let reached = true;
+    try { await pass(); } catch (e) { console.error('failed:', e.message); reached = await send([], e.status || 'error').then(() => true, () => false); }
     if (ONCE) break;
-    await sleep(REST_S() * 1000);
+    await sleep((reached ? REST_S() : 20) * 1000);   // Clockwork itself not answering (it is still starting): try again soon
   }
 }

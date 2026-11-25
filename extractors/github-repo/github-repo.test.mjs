@@ -35,22 +35,26 @@ test('each kind of activity becomes a readable item in the right thread', () => 
   for (const it of [star, issue, push]) { assert.equal(it.direction, 'incoming'); assert.equal(it.chatName, 'acme/widgets'); assert.match(it.sourceId, /^ev:\d+$/); }
 });
 
-test('reads a repository, sends nothing twice, fills in a missing title, skips named people, and only ever reads', async () => {
-  const calls = [], got = [], statuses = []; let events, etag = '"v1"', mode = 'ok';
+test('reads a repository directly, sends nothing twice, skips named people, needs a token only when private, and only ever reads', async () => {
+  const calls = [], got = [], statuses = []; let mode = 'ok', etag = '"v1"';
+  const gh = { stars: 2, forks: 0, commits: [], issues: [], comments: [], reviewComments: [], stargazers: [], forkList: [], events: [] };
   const github = await listen((req, res) => {
-    const u = new URL(req.url, 'http://x'); calls.push({ method: req.method, route: u.pathname, auth: req.headers.authorization, match: req.headers['if-none-match'] });
+    const u = new URL(req.url, 'http://x'), route = u.pathname.replace('/repos/acme/widgets', '') || '/'; calls.push({ method: req.method, route, auth: req.headers.authorization, accept: req.headers.accept });
     assert.ok(req.headers['user-agent'], 'GitHub rejects calls without a User-Agent');
     const json = (code, body, headers = {}) => { res.writeHead(code, { 'content-type': 'application/json', ...headers }); res.end(JSON.stringify(body)); };
     if (mode === 'private' && req.headers.authorization !== 'Bearer ' + TOKEN) return json(404, { message: 'Not Found' });
-    if (u.pathname === '/repos/acme/widgets/events') {
-      const head = { etag, 'x-poll-interval': '0' };
-      if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); }
-      return json(200, u.searchParams.get('page') === '1' ? events : [], head);
-    }
-    if (u.pathname === '/repos/acme/widgets/pulls/9') return json(200, { number: 9, title: 'Speed up the build', html_url: 'https://github.example/acme/widgets/pull/9', body: 'Twice as fast.' });
+    const since = Date.parse(u.searchParams.get('since') || 0), first = u.searchParams.get('page') === '1', changed = l => first ? l.filter(x => Date.parse(x.updated_at || x.created_at) >= since) : [];
+    if (route === '/') return json(200, { full_name: 'acme/widgets', stargazers_count: gh.stars, forks_count: gh.forks });
+    if (route === '/issues') { assert.equal(u.searchParams.get('state'), 'all'); return json(200, changed(gh.issues)); }
+    if (route === '/issues/comments') return json(200, changed(gh.comments));
+    if (route === '/pulls/comments') return json(200, changed(gh.reviewComments));
+    if (route === '/commits') return json(200, first ? gh.commits.filter(c => Date.parse(c.commit.committer.date) >= since) : []);
+    if (route === '/stargazers') { assert.equal(req.headers.accept, 'application/vnd.github.star+json', 'only this form says when each star was given'); return json(200, gh.stargazers); }
+    if (route === '/forks') return json(200, gh.forkList);
+    if (route === '/events') { const head = { etag, 'x-poll-interval': '0' }; if (req.headers['if-none-match'] === etag) { res.writeHead(304, head); return res.end(); } return json(200, first ? gh.events : [], head); }
     return json(404, { message: 'Not Found' });
   });
-  const api = `http://127.0.0.1:${github.address().port}`;
+  const api = `http://127.0.0.1:${github.address().port}`, W = 'https://github.example/acme/widgets';
   const core = await listen((req, res, body) => {
     assert.equal(req.url, '/ingest/events'); assert.equal(req.headers.authorization, 'Bearer ingest-test'); const b = JSON.parse(body);
     assert.equal(b.source, 'github'); assert.equal(b.account, 'repos'); statuses.push(b.status); got.push(...b.events);
@@ -60,40 +64,54 @@ test('reads a repository, sends nothing twice, fills in a missing title, skips n
   const run = (env = {}) => new Promise(done => { const out = []; const c = spawn(process.execPath, [path.join(HERE, 'main.mjs'), '--once'], { env: { PATH: process.env.PATH,
     CLOCKWORK_CORE_URL: `http://127.0.0.1:${core.address().port}`, CLOCKWORK_INGEST_TOKEN: 'ingest-test', CLOCKWORK_EXTRACTOR_DATA: data, CLOCKWORK_GITHUB_API: api, CLOCKWORK_GITHUB_WEB: 'https://github.example',
     CLOCKWORK_GITHUB_PACE_MS: '0', ...env } }); c.stdout.on('data', d => out.push(d)); c.stderr.on('data', d => out.push(d)); c.on('exit', () => done(Buffer.concat(out).toString())); });
+  const issue = (n, agoS, login, title, extra = {}) => ({ id: 9000 + n, number: n, title, body: 'Details of ' + title, state: 'open', user: { login }, created_at: iso(agoS), updated_at: iso(agoS), html_url: `${W}/issues/${n}`, ...extra });
+  const text = id => got.find(i => i.sourceId === id)?.text;
   try {
     // Nothing named yet: it says so and asks GitHub nothing.
     await run(); assert.equal(statuses.at(-1), 'needs_login'); assert.equal(calls.length, 0);
 
     fs.writeFileSync(path.join(data, 'repos'), 'acme/widgets\n'); fs.writeFileSync(path.join(data, 'skip'), 'Owner-Example\n');
-    events = [   // roughly newest first; like the real list, not strictly in order and with ids that do not only grow
-      ev(9, 'PublicEvent', 5 * 86400, 'owner-example', {}),
-      ev(105, 'WatchEvent', 300, 'dana-example', { action: 'started' }),
-      ev(104, 'PushEvent', 600, 'owner-example', { ref: 'refs/heads/main', size: 1 }),
-      ev(103, 'PullRequestEvent', 900, 'sam-example', { action: 'opened', number: 9, pull_request: { number: 9, url: `${api}/repos/acme/widgets/pulls/9` } }),
-      ev(102, 'IssuesEvent', 1200, 'dana-example', { action: 'opened', issue: { number: 12, title: 'Crash on empty input', body: 'It falls over.' } }),
-      ev(101, 'IssuesEvent', 3 * 86400, 'dana-example', { action: 'opened', issue: { number: 1, title: 'Too old for the first run' } })];
+    gh.issues = [issue(1, 3 * 86400, 'dana-example', 'Too old for the first run'), issue(12, 1200, 'dana-example', 'Crash on empty input'),
+      issue(9, 900, 'sam-example', 'Speed up the build', { pull_request: { merged_at: null }, html_url: `${W}/pull/9` }), issue(13, 800, 'owner-example', 'My own note')];
+    gh.comments = [{ id: 501, issue_url: `${api}/repos/acme/widgets/issues/12`, html_url: `${W}/issues/12#issuecomment-501`, user: { login: 'sam-example' }, body: 'Same here', created_at: iso(700), updated_at: iso(700) }];
+    gh.reviewComments = [{ id: 601, pull_request_url: `${api}/repos/acme/widgets/pulls/9`, html_url: `${W}/pull/9#discussion_r601`, user: { login: 'dana-example' }, body: 'Why this flag?', path: 'build.sh', created_at: iso(600), updated_at: iso(600) }];
+    gh.stargazers = [{ starred_at: iso(5 * 86400), user: { login: 'early-example', html_url: 'https://github.example/early-example' } }, { starred_at: iso(300), user: { login: 'dana-example', html_url: 'https://github.example/dana-example' } }];
+    gh.commits = [{ sha: 'abc1234', html_url: `${W}/commit/abc1234`, author: { login: 'sam-example' }, commit: { message: 'Fix the uploader\n\nLong text', committer: { date: iso(500) } } },
+      { sha: 'def5678', author: { login: 'owner-example' }, commit: { message: 'My own change', committer: { date: iso(450) } } }];
+    gh.events = [ev(205, 'ReleaseEvent', 400, 'sam-example', { action: 'published', release: { tag_name: 'v1.0' } }), ev(204, 'PushEvent', 450, 'sam-example', { ref: 'refs/heads/main' }),
+      ev(203, 'IssuesEvent', 1200, 'dana-example', { action: 'opened', issue: { number: 12, title: 'Crash on empty input' } }), ev(9, 'PublicEvent', 5 * 86400, 'owner-example', {})];
     await run();
-    assert.deepEqual(got.map(i => i.sourceId), ['ev:102', 'ev:103', 'ev:105'], 'oldest first; the old entry and the skipped person are left out');
+    assert.deepEqual(got.map(i => i.sourceId), ['issue:9012:opened', 'pull request:9009:opened', 'comment:501', 'review-comment:601', 'commit:abc1234', 'ev:205', 'star:dana-example:' + gh.stargazers[1].starred_at],
+      'oldest first; the old issue, the old star, the skipped person and the activity entry for an issue already read directly are left out');
     assert.ok(got.every(i => i.origin === 'history'), 'the first run is marked as history');
-    assert.equal(got[1].text, '[pull request opened] #9 Speed up the build\n\nsam-example: Twice as fast.'); assert.equal(got[1].url, 'https://github.example/acme/widgets/pull/9');
+    assert.equal(text('issue:9012:opened'), '[issue opened] #12 Crash on empty input\n\ndana-example: Details of Crash on empty input');
+    assert.equal(text('comment:501'), '[comment] on issue #12 Crash on empty input\n\nsam-example: Same here'); assert.equal(got[2].threadId, 'acme/widgets#12');
+    assert.equal(text('review-comment:601'), '[review comment] on pull request #9 Speed up the build (build.sh)\n\ndana-example: Why this flag?'); assert.equal(got[3].url, `${W}/pull/9#discussion_r601`);
+    assert.equal(text('commit:abc1234'), '[commit] Fix the uploader'); assert.equal(text('ev:205'), '[release published] v1.0'); assert.equal(got[6].text, '[star] dana-example starred acme/widgets (2 in all)');
     assert.equal(statuses.at(-1), 'ok'); assert.equal(calls[0].auth, undefined, 'no token, no authorization header');
 
-    // Nothing changed: GitHub answers 304 and nothing is sent.
-    got.length = 0; calls.length = 0; await run();
-    assert.equal(got.length, 0); assert.equal(calls.length, 1); assert.equal(calls[0].match, '"v1"');
+    // Nothing changed: the stars are not asked for again and nothing new is sent (what overlaps carries the same ids).
+    const before = new Set(got.map(i => i.sourceId)); calls.length = 0; await run();
+    assert.ok(got.every(i => before.has(i.sourceId))); assert.ok(!calls.some(c => c.route === '/stargazers' || c.route === '/forks'));
 
-    // Something new: only that is sent, and it is no longer history.
-    events.unshift(ev(106, 'IssueCommentEvent', 30, 'sam-example', { action: 'created', issue: { number: 12, title: 'Crash on empty input' }, comment: { body: 'Same here' } })); etag = '"v2"';
-    events.push(ev(7, 'WatchEvent', 4 * 86400, 'late-example', { action: 'started' }));   // an old entry GitHub only lists now: from before the window, never sent
+    // A pull request is merged, an issue is closed and opened again, someone new stars and forks: each arrives once, and no longer as history.
+    got.length = 0; etag = '"v2"';
+    Object.assign(gh.issues[2], { state: 'closed', closed_at: iso(20), updated_at: iso(20), pull_request: { merged_at: iso(20) } });
+    Object.assign(gh.issues[1], { state: 'closed', closed_at: iso(30), updated_at: iso(30) });
+    gh.stars = 3; gh.stargazers.push({ starred_at: iso(10), user: { login: 'new-example' } }); gh.forks = 1; gh.forkList = [{ id: 77, full_name: 'new-example/widgets', html_url: 'https://github.example/new-example/widgets', owner: { login: 'new-example' }, created_at: iso(15) }];
     await run();
-    assert.deepEqual(got.map(i => i.sourceId), ['ev:106']); assert.equal(got[0].origin, undefined); assert.equal(got[0].threadId, 'acme/widgets#12');
+    assert.equal(text(`issue:9012:closed:${gh.issues[1].closed_at}`), '[issue closed] #12 Crash on empty input'); assert.equal(text(`pull request:9009:closed:${gh.issues[2].closed_at}`), '[pull request merged] #9 Speed up the build');
+    assert.equal(text('fork:77'), '[fork] new-example forked acme/widgets to new-example/widgets'); assert.equal(text('star:new-example:' + gh.stargazers[2].starred_at), '[star] new-example starred acme/widgets (3 in all)');
+    assert.ok(got.filter(i => !before.has(i.sourceId)).every(i => i.origin === undefined));
+    got.length = 0; Object.assign(gh.issues[1], { state: 'open', closed_at: null, updated_at: iso(1) }); await run();
+    assert.ok(got.some(i => i.text === '[issue reopened] #12 Crash on empty input'));
 
     // A private repository without a token: it reports that a login is needed. With the token it reads again.
-    mode = 'private'; etag = '"v3"'; got.length = 0; fs.writeFileSync(path.join(data, 'state.json'), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(data, 'state.json'), 'utf8')), repos: {} }));
-    const said = await run(); assert.equal(statuses.at(-1), 'needs_login'); assert.match(said, /private repository needs a token/); assert.equal(got.length, 0);
+    mode = 'private'; got.length = 0; fs.writeFileSync(path.join(data, 'state.json'), '{}');
+    const told = await run(); assert.equal(statuses.at(-1), 'needs_login'); assert.match(told, /private repository needs a token/); assert.equal(got.length, 0);
     fs.writeFileSync(path.join(data, 'state.json'), '{}'); calls.length = 0;
     await run({ CLOCKWORK_SECRET_TOKEN: TOKEN }); assert.equal(statuses.at(-1), 'ok'); assert.ok(got.length >= 4); assert.equal(calls[0].auth, 'Bearer ' + TOKEN);
-    assert.ok(!JSON.stringify(fs.readFileSync(path.join(data, 'state.json'), 'utf8')).includes('Crash'), 'no item text is kept in the state file');
+    const kept = fs.readFileSync(path.join(data, 'state.json'), 'utf8'); assert.ok(!kept.includes('Crash') && !kept.includes(TOKEN), 'neither item text nor the token is kept in the state file');
   } finally { github.close(); core.close(); fs.rmSync(data, { recursive: true, force: true }); }
   // Read-only by construction.
   assert.ok(calls.every(c => c.method === 'GET'));

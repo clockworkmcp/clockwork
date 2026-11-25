@@ -1,19 +1,19 @@
 # GitHub repositories
 
-Brings the activity of the GitHub repositories you name into Clockwork: issues and pull requests being opened, closed or
-merged, comments, reviews, stars, forks, pushes and releases. One item per thing that happened. Everything about one issue
-or pull request lands in the same thread.
+Brings what happens on the GitHub repositories you name into Clockwork: issues and pull requests being opened, closed,
+merged or reopened, comments, commits, stars, forks, reviews and releases. One item per thing that happened. Everything
+about one issue or pull request lands in the same thread.
 
 This is for watching a project. For what GitHub addresses to *you* (mentions, review requests, failed runs), use the
 [GitHub notifications](../github/README.md) extractor; both can run together and file under the same source, `github`.
 
-It only reads. Every call to GitHub is a `GET` to the repository's activity list.
+It only reads. Every call to GitHub is a `GET`.
 
 ## Setting it up
 
 1. Save the repositories, one `owner/name` per line, in the file `repos` in this extractor's private folder
    (`clockwork connect github-repo` tells you where that is).
-2. **Public repository:** nothing else is needed.
+2. **Public repository:** nothing else is needed, though a token makes it quicker and steadier (see Limits).
    **Private repository:** on GitHub open **Settings**, **Developer settings**, **Personal access tokens**,
    **Fine-grained tokens**, then **Generate new token**. Under "Repository access" choose **Only select repositories** and
    pick the repository. Under "Repository permissions" set **Metadata**, **Issues**, **Pull requests** and **Contents** to
@@ -30,31 +30,37 @@ commas or spaces), and the token goes in the host's secret store as `CLOCKWORK_S
 
 - Channel: the repository, for example `acme/widgets`.
 - Text: what happened in square brackets, then the title, then what was written:
-  `[issue opened] #12 Widget crashes on empty input`, `[star] dana-example starred acme/widgets`.
+  `[issue opened] #12 Widget crashes on empty input`, `[star] dana-example starred acme/widgets (41 in all)`.
 - Link: the issue, pull request, comment, release or fork on GitHub. For a star the link is the person's profile.
 
 ## What it contacts
 
-- `api.github.com` (or the server named in the file `api`, for GitHub Enterprise), with `GET` requests only:
-  `/repos/OWNER/NAME/events`, and one request per pull request whose title GitHub left out of the list.
+- `api.github.com` (or the server named in the file `api`, for GitHub Enterprise), with `GET` requests only. For each
+  repository: the repository itself, its issues, issue comments, pull request comments and commits changed since the last
+  look, its activity list, and its stargazers and forks when their count changed.
 - Clockwork on this machine.
 
 Nothing else.
 
 ## What it keeps
 
-In its private folder: `repos`, the optional `skip`, and `state.json` with the place it has read up to in each
-repository. No issue or comment text is kept there, and the token never is.
+In its private folder: `repos`, the optional `skip`, and `state.json` with the time it last looked, the open or closed
+state of the issues it has seen, and which activity entries it has read. No issue or comment text is kept there, and
+the token never is.
 
 ## Limits
 
-- **It can be late.** GitHub says its activity list is not real time: an entry can appear anything from half a minute to a
-  few hours after the fact. Do not rely on this for anything that needs a reply within minutes.
-- GitHub keeps about 300 entries, and nothing older than 30 days. The first run brings the last 24 hours, marked as history.
-- Without a token GitHub allows 60 requests an hour, so it looks every five minutes; with a token, about once a minute. It
-  never looks more often than GitHub's `X-Poll-Interval` allows.
-- A star shows who starred, not the new total. Someone removing a star is not reported by GitHub at all.
-- Pushes carry the branch and, where GitHub includes them, the first line of each commit message.
+- **Issues, pull requests, comments, commits, stars and forks arrive within one look**: about a minute with a token, a
+  quarter of an hour without.
+- **Releases, reviews and new branches can be late.** They come from GitHub's activity list, which GitHub says can run
+  from half a minute to a few hours behind.
+- **A token is worth having even for a public repository.** Without one GitHub allows 60 requests an hour for everyone
+  behind the same network address, which a shared or hosted machine can use up. Any fine-grained token with
+  "Public repositories (read-only)" access and no permissions at all is enough.
+- The first run brings the last 24 hours, marked as history.
+- A star shows who starred and the new total. Someone removing a star is not reported.
+- Who closed an issue is not reported, only that it was closed (or, for a pull request, merged).
+- Commits are those on the main branch, with the first line of each message.
 
 ## Risks
 

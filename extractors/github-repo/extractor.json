@@ -1,7 +1,7 @@
 {
   "name": "github-repo",
   "source": "github",
-  "description": "Everything that happens on the GitHub repositories you list: new issues and pull requests, comments, reviews, stars, forks, pushes and releases. Read-only: it only reads each repository's activity list. A public repository needs no token.",
+  "description": "Everything that happens on the GitHub repositories you list: new issues and pull requests, comments, commits, stars, forks, reviews and releases. Read-only. A public repository needs no token.",
   "run": {
     "command": "node",
     "args": [
@@ -11,10 +11,10 @@
   "secrets": [
     {
       "name": "token",
-      "prompt": "GitHub token (press Enter if every repository is public)",
+      "prompt": "GitHub token (press Enter to go without one)",
       "optional": true,
       "pattern": "^(github_pat_|ghp_)[A-Za-z0-9_]+$",
-      "help": "Only a private repository needs this. On GitHub open Settings, Developer settings, Personal access tokens, Fine-grained tokens, choose \"Only select repositories\" and that repository, and set Metadata, Issues, Pull requests and Contents to Read-only. Steps: extractors/github-repo/README.md."
+      "help": "A private repository needs this; for a public one it is optional but makes the reader quicker and steadier. On GitHub open Settings, Developer settings, Personal access tokens, Fine-grained tokens. Public only: choose \"Public repositories (read-only)\" and no permissions. Private: choose \"Only select repositories\" and that repository, and set Metadata, Issues, Pull requests and Contents to Read-only. Steps: extractors/github-repo/README.md."
     }
   ],
   "requires": [

@@ -9,9 +9,9 @@ What changed for someone running Clockwork, newest first. `clockwork version` sh
   included, by words, sender, group, source and time, and can read one conversation whole. Until now an agent could only
   list a bucket.
 - **Watch a GitHub repository.** `clockwork connect github-repo` brings in what happens on the repositories you list:
-  issues, pull requests, comments, reviews, stars, forks, pushes and releases. A public repository needs no token.
-  GitHub's activity list can run minutes to hours late: see
-  [extractors/github-repo/README.md](extractors/github-repo/README.md). Tried against one real repository's activity.
+  issues, pull requests, comments, commits, stars, forks, reviews and releases. A public repository needs no token,
+  though one makes it quicker. Most of it arrives within a minute or so; releases and reviews can run late: see
+  [extractors/github-repo/README.md](extractors/github-repo/README.md). Run against one real repository.
 - **An extractor's key can be optional.** `"optional": true` in a manifest's `secrets` is for a key the program runs
   without; pressing Enter at `clockwork connect` skips it.
 - **Fixed: X capture on your own Mac could stop for good.** When the hidden browser lost its only page, the connector
