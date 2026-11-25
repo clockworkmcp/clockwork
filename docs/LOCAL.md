@@ -74,9 +74,9 @@ Slack is read through Slack's own API by an app that belongs to you and can only
 1. Go to api.slack.com/apps, choose "Create New App", then "From a manifest", pick your workspace and paste the contents
    of `extractors/slack/slack-app.json`.
 2. Choose "Install to Workspace" and approve it. On a work Slack this may send a request to an admin instead.
-3. Under "OAuth & Permissions" copy the **User OAuth Token** (it starts with `xoxp-`) and save it as the only line of
-   `~/.clockwork/v2/extractor-data/slack/token`. Keep that file to yourself: `chmod 600` it.
-4. Run `clockwork connect slack`.
+3. Under "OAuth & Permissions" copy the **User OAuth Token** (it starts with `xoxp-`).
+4. Run `clockwork connect slack` and paste the token when asked. Nothing is shown as you paste, and it goes into your
+   macOS Keychain, not into a file.
 
 It reads the conversations you are a member of: direct messages first, then group messages and channels. The first time
 it brings in the last 24 hours. Replies inside threads are picked up within about 15 minutes, for threads started in the
@@ -140,7 +140,9 @@ are in [CONNECT.md](CONNECT.md).
 | `~/.clockwork/v2/extractors/` | extractors you added or wrote |
 | `~/.clockwork/v2/student/` | the trained model and the downloaded embedding model |
 
-Nothing is encrypted beyond your disk's own encryption, so turn on FileVault. To remove Clockwork: `clockwork stop`, delete
+The keys `clockwork connect` asks for (app passwords and API tokens) are kept in your macOS Keychain, not in that folder.
+Everything in the folder, your messages and the WhatsApp, X and Google sessions among them, is not encrypted beyond your
+disk's own encryption, so turn on FileVault. To remove Clockwork: `clockwork stop`, delete
 `~/.clockwork/v2` and this folder, and remove the linked device in WhatsApp and the app's access in your Google account.
 
 ## Settings in `config.json`

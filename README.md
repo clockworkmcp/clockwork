@@ -207,7 +207,11 @@ you. The contract and manifest format are in [docs/EXTRACTORS.md](docs/EXTRACTOR
 ## Where your data goes
 
 - **Stored locally.** Items, labels, the model and the account sessions live in `~/.clockwork/v2` on your machine.
-  Nothing is encrypted beyond your disk's own encryption, so turn on FileVault.
+  That folder is not encrypted beyond your disk's own encryption, so turn on FileVault.
+- **Keys go in your Keychain.** The app passwords and API tokens that `clockwork connect` asks for are kept in the
+  macOS Keychain, not in a file, and each is handed only to the extractor it belongs to. The sessions a source hands
+  back while linking (WhatsApp, X, Google and Microsoft sign-ins) and three older extractors (Bluesky, Jira, Mastodon)
+  still use files only you can read.
 - **Read-only.** Nothing in Clockwork sends, replies, reacts, posts or marks anything as read.
 - **Your agent reads message content.** To label an item the agent reads it over MCP. If your agent runs on a cloud
   model, that content goes to that model's provider. Clockwork itself has no telemetry and no account, and by default

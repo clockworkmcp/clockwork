@@ -43,7 +43,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const stateFile = path.join(DATA, 'state.json'), tokenFile = path.join(DATA, 'token');
 const loadState = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return {}; } };
 const saveState = s => { fs.mkdirSync(DATA, { recursive: true, mode: 0o700 }); fs.writeFileSync(stateFile + '.tmp', JSON.stringify(s), { mode: 0o600 }); fs.renameSync(stateFile + '.tmp', stateFile); };
-const readToken = () => { try { return fs.readFileSync(tokenFile, 'utf8').trim(); } catch { return ''; } };
+/** The key: from the Keychain, handed over by Clockwork. The file is where it used to be kept. */
+const readToken = () => { if (process.env.CLOCKWORK_SECRET_TOKEN) return process.env.CLOCKWORK_SECRET_TOKEN.trim(); try { return fs.readFileSync(tokenFile, 'utf8').trim(); } catch { return ''; } };
 
 let lastContact = 0;
 async function send(events, status = 'ok') {

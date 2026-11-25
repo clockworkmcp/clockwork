@@ -22,8 +22,9 @@ not want a tunnel), say plainly which of the four is therefore not done.
 
 ## Rules
 
-- **Never print, copy or log a token or key.** Refer to the file that holds it. The user saves account tokens into files
-  themself; do not ask them to paste one into the chat.
+- **Never print, copy or log a token or key.** The user types account keys into `clockwork connect <name>` themself, in
+  their own terminal, where it goes straight into their Keychain. Do not ask them to paste one into the chat, and do
+  not run that step for them: run from your shell it has nobody to ask, and it will say so.
 - **Never log in to an account for the user,** and never answer a login check or accept an agreement on their behalf.
 - **Ask before installing anything system-wide** (Homebrew packages, a newer Node or Python). Say what and why.
 - **Do not link an account the user did not ask for.** Ask which sources they want; link only those.
@@ -105,8 +106,8 @@ and relay exactly what it says. Each needs something only the user can do:
 |---|---|
 | WhatsApp | scans a QR code with their phone |
 | Gmail | creates their own Google OAuth client, saves its file where `connect` says, approves access in the browser |
-| Gmail, quicker (`gmail-imap`) | makes a Google app password and saves it where `connect` says. Tell them first that an app password can also send and delete mail, and that only the program keeps it to reading; offer it when the OAuth client is too much, not by default |
-| Slack | creates a Slack app from `extractors/slack/slack-app.json`, installs it, saves its user token in the file `connect` names |
+| Gmail, quicker (`gmail-imap`) | makes a Google app password, then runs `clockwork connect gmail-imap` themself and types it in. Tell them first that an app password can also send and delete mail, and that only the program keeps it to reading; offer it when the OAuth client is too much, not by default |
+| Slack | creates a Slack app from `extractors/slack/slack-app.json`, installs it, then runs `clockwork connect slack` themself and pastes its user token |
 | X | logs in themself in the Chrome window that opens |
 | any other | what `connect` prints; the steps are in `extractors/<name>/README.md` |
 

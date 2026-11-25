@@ -11,10 +11,10 @@ did before.
 1. In Linear, open **Settings > Account > Security & Access** and create a **personal API key**.
 2. When asked what the key may do, choose **Read** only. Do not give it Write, Admin, Create issues or Create comments.
    You can also limit the key to some teams if you like.
-3. Save the key (it starts with `lin_api_`) as the only line of a file named `token` in this extractor's private folder:
-   `~/.clockwork/v2/extractor-data/linear/token` unless you moved Clockwork's data. `clockwork connect linear` tells you
-   the exact place if the file is missing.
-4. Run `clockwork check linear`, then `clockwork enable linear`.
+3. Copy the key (it starts with `lin_api_`). Run `clockwork connect linear` in your own terminal and paste it when asked;
+   nothing is shown as you paste. Clockwork keeps it in your macOS Keychain, not in a file (on a machine with no
+   keychain, in a file only you can read).
+4. Run `clockwork check linear`.
 
 If your workspace does not let members create API keys, an admin has to allow it first.
 
@@ -35,7 +35,6 @@ Nothing else.
 
 In its private folder only:
 
-- `token`: the key you saved.
 - `state.json`: the time of the newest notification it has seen and the ids of the last few hundred, so nothing is
   brought in twice. No message text.
 
@@ -55,5 +54,5 @@ The notifications themselves (who, which issue, the comment text) go into Clockw
 
 This is almost always a work account. Issue titles and comments are your employer's information, and this copies them to
 this machine and shows them to your agent. Whether that is allowed is your employer's decision, not yours and not
-Clockwork's. Ask first if you are not sure. To stop, run `clockwork disable linear`, delete the `token` file, and revoke
-the key in Linear's settings.
+Clockwork's. Ask first if you are not sure. To stop, run `clockwork disable linear` and revoke the key in Linear's
+settings.

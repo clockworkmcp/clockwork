@@ -3,7 +3,6 @@
   "source": "slack",
   "description": "Messages from the Slack conversations you are in, read through Slack's own API with a token for an app you create. Read-only: it has no permission to post.",
   "run": { "command": "node", "args": ["main.mjs"] },
-  "requires": [{ "file": "{extractorData}/token", "help": "Create a Slack app for yourself from extractors/slack/slack-app.json, install it to your workspace, and save its \"User OAuth Token\" (starts with xoxp-) in that file. Steps: docs/LOCAL.md, \"Slack\". A work Slack may need an admin to approve the app, and your employer's rules decide whether you may do this at all." }],
-  "ready": { "file": "{extractorData}/token" },
+  "secrets": [{ "name": "token", "prompt": "Slack user token", "help": "Create a Slack app for yourself from extractors/slack/slack-app.json, install it to your workspace, and paste its \"User OAuth Token\" (starts with xoxp-) when asked. Steps: docs/LOCAL.md, \"Slack\". A work Slack may need an admin to approve the app, and your employer's rules decide whether you may do this at all.", "file": "{extractorData}/token" }],
   "restartSeconds": 60
 }

@@ -3,7 +3,6 @@
   "source": "linear",
   "description": "The notifications in your Linear inbox (assignments, mentions, comments, status changes), read through Linear's own API with a personal API key. Read-only: it only ever asks Linear a question and never marks anything as read.",
   "run": { "command": "node", "args": ["main.mjs"] },
-  "requires": [{ "file": "{extractorData}/token", "help": "In Linear, open Settings > Account > Security & Access, create a personal API key, give it the \"Read\" permission only, and save the key (starts with lin_api_) in that file. Steps: extractors/linear/README.md. A work Linear may not let members create keys, and your employer's rules decide whether you may do this at all." }],
-  "ready": { "file": "{extractorData}/token" },
+  "secrets": [{ "name": "token", "prompt": "Linear API key", "help": "In Linear, open Settings > Account > Security & Access, create a personal API key, give it the \"Read\" permission only, and paste the key (starts with lin_api_) when asked. Steps: extractors/linear/README.md. A work Linear may not let members create keys, and your employer's rules decide whether you may do this at all.", "file": "{extractorData}/token" }],
   "restartSeconds": 60
 }

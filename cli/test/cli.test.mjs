@@ -88,7 +88,7 @@ test('new offers a template for each way of reaching a source, and each one pass
   assert.ok(!fs.existsSync(path.join(lib.paths.userExtractors(), 'nope')));
   for (const kind of ['api', 'mac-app']) {
     const name = 'kind-' + kind, made = cw('new', name, kind); assert.equal(made.status, 0, made.stderr); assert.match(made.stdout, new RegExp(`"${kind}" template`));
-    const x = lib.findExtractor(name, lib.loadConfig()); assert.deepEqual(x.problems, []); assert.equal(x.manifest.source, name); assert.ok(x.manifest.ready, 'not started until the user has done their part');
+    const x = lib.findExtractor(name, lib.loadConfig()); assert.deepEqual(x.problems, []); assert.equal(x.manifest.source, name); assert.ok(x.manifest.ready || x.manifest.secrets, 'not started until the user has done their part');
     const r = cw('check', name, '--seconds=6'); assert.equal(r.status, 0, r.stdout + r.stderr);
     assert.match(r.stdout, /status "needs_login"/, 'with no key and no store it says so; it does not stop'); assert.match(r.stdout, /fixtures: \d file\(s\) of sample input read offline, 4 item\(s\), all well formed/);
     assert.match(r.stdout, /still reports in, and sends nothing malformed, with each file cut short or unreadable/);
@@ -135,6 +135,77 @@ test('add from a git address pins the exact version; update asks, and only moves
   } finally { fs.rmSync(repo, { recursive: true, force: true }); }
 });
 
+// A stand-in for Apple's `security` program: the few subcommands Clockwork uses, kept in a JSON file, with every command line it was given written down.
+function fakeKeychain() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-keychain-')), bin = path.join(dir, 'security'), store = path.join(dir, 'items.json'), log = path.join(dir, 'argv.log');
+  fs.writeFileSync(bin, `#!${process.execPath}
+const fs = require('fs'), a = process.argv.slice(2), items = (() => { try { return JSON.parse(fs.readFileSync(${JSON.stringify(store)}, 'utf8')); } catch { return {}; } })();
+fs.appendFileSync(${JSON.stringify(log)}, a.join(' ') + '\\n');
+const opt = (list, k) => list[list.indexOf(k) + 1], save = () => fs.writeFileSync(${JSON.stringify(store)}, JSON.stringify(items));
+if (a[0] === '-i') { for (const line of fs.readFileSync(0, 'utf8').split('\\n')) { const w = line.trim().split(/\\s+/); if (w[0] === 'add-generic-password') items[opt(w, '-s') + '|' + opt(w, '-a')] = Buffer.from(opt(w, '-X'), 'hex').toString('latin1'); } save(); }
+else if (a[0] === 'find-generic-password') { const v = items[opt(a, '-s') + '|' + opt(a, '-a')]; if (v === undefined) process.exit(44); console.log(v); }
+else if (a[0] === 'delete-generic-password') { delete items[opt(a, '-s') + '|' + opt(a, '-a')]; save(); }
+else process.exit(2);
+`, { mode: 0o755 });
+  return { dir, env: { CLOCKWORK_SECRETS: 'keychain', CLOCKWORK_SECURITY_BIN: bin }, items: () => { try { return JSON.parse(fs.readFileSync(store, 'utf8')); } catch { return {}; } }, argv: () => { try { return fs.readFileSync(log, 'utf8'); } catch { return ''; } } };
+}
+/** Every file under the data folder that holds `needle`. */
+const filesHolding = needle => fs.readdirSync(DATA, { recursive: true }).map(f => path.join(DATA, f)).filter(f => fs.statSync(f).isFile() && fs.readFileSync(f).includes(needle));
+
+test('manifest rules for secrets: named, prompted, and an old key file may only be the extractor\'s own', () => {
+  const ok = { name: 'feed', source: 'feed', run: { command: 'node', args: ['main.mjs'] } }, one = s => lib.manifestProblems({ ...ok, secrets: [s] }).length;
+  assert.equal(one({ name: 'token', prompt: 'Feed token', help: 'where to get it', pattern: '^tok_', hidden: true, file: '{extractorData}/token' }), 0);
+  assert.ok(one({ name: 'Token', prompt: 'x' })); assert.ok(one({ name: 'token' })); assert.ok(one({ name: 'token', prompt: 'x', pattern: '(' }));
+  for (const file of ['/etc/passwd', '{data}/config.json', '{extractorData}/../config.json', '{extractorData}/a/b', '~/.ssh/id_ed25519']) assert.ok(one({ name: 'token', prompt: 'x', file }), `${file} is not the extractor's to take`);
+  assert.ok(lib.manifestProblems({ ...ok, secrets: [{ name: 'token', prompt: 'a' }, { name: 'token', prompt: 'b' }] }).length, 'no two secrets with one name');
+});
+
+test('connect asks for a key, keeps it in the Keychain and nowhere in the data folder, and hands it only to its own extractor', async () => {
+  const secrets = await import('../secrets.mjs'), kc = fakeKeychain(), KEY = 'tok_made-up_4f9a1c', NEWER = 'tok_made-up_77b2e0';
+  const cwk = (input, ...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8', env: { ...process.env, CLOCKWORK_DATA: DATA, CLOCKWORK_NO_OPEN: '1', ...kc.env }, input });
+  const dir = path.join(lib.paths.userExtractors(), 'keyed'), data = lib.paths.extractorData('keyed'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'extractor.json'), JSON.stringify({ name: 'keyed', source: 'keyed', run: { command: 'node', args: ['main.mjs'] }, secrets: [{ name: 'token', prompt: 'Feed token', help: 'Made up for the test.', pattern: '^tok_', file: '{extractorData}/token' }] }));
+  fs.writeFileSync(path.join(dir, 'main.mjs'), '');
+  const x = () => lib.findExtractor('keyed', lib.loadConfig()), handed = () => { Object.assign(process.env, kc.env); try { return secrets.secretsFor('keyed', lib.resolveExtractor(x(), lib.loadConfig()).secrets); } finally { for (const k of Object.keys(kc.env)) delete process.env[k]; } };
+  try {
+    assert.deepEqual(x().problems, []);
+    let r = cwk('', 'connect', 'keyed'); assert.notEqual(r.status, 0); assert.match(r.stderr, /run this yourself in a terminal/); assert.match(r.stderr, /Do not give it to an agent/); assert.equal(x().enabled, false, 'not switched on without its key');
+    r = cwk('ghp_not-this-kind\n', 'connect', 'keyed'); assert.notEqual(r.status, 0); assert.match(r.stderr, /not shaped like a Feed token, so nothing was saved/); assert.ok(!r.stderr.includes('ghp_not')); assert.deepEqual(kc.items(), {});
+    r = cwk(KEY + '\n', 'connect', 'keyed'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /Saved in your macOS Keychain/); assert.ok(!(r.stdout + r.stderr).includes(KEY), 'the key is never printed');
+    assert.deepEqual(Object.values(kc.items()), [KEY]); assert.match(Object.keys(kc.items())[0], /^dev\.clockwork\.keyed\.[0-9a-f]{10}\|token$/, 'an item of its own for this extractor and this data folder');
+    assert.ok(!kc.argv().includes(KEY), 'the key never appears on a command line, where other programs could list it'); assert.deepEqual(filesHolding(KEY), [], 'and in no file under the data folder');
+    assert.equal(x().enabled, true); assert.deepEqual(handed(), { env: { CLOCKWORK_SECRET_TOKEN: KEY }, missing: [], inFiles: [] });
+    assert.ok(!JSON.stringify(lib.resolveExtractor(x(), lib.loadConfig())).includes(KEY), 'a trial run (clockwork check) is built without it');
+    assert.match(cwk('', 'connect', 'keyed').stdout, /Feed token: already saved/);
+    r = cwk(NEWER + '\n', 'connect', 'keyed', '--replace'); assert.equal(r.status, 0, r.stderr); assert.deepEqual(Object.values(kc.items()), [NEWER]);
+
+    // A key saved by hand in a file, as older versions asked: readable by others here, to show it is tightened and then moved.
+    cwk(NEWER + '\n', 'connect', 'keyed', '--replace'); fs.writeFileSync(path.join(data, 'token'), KEY + '\n', { mode: 0o644 }); fs.chmodSync(path.join(data, 'token'), 0o644);
+    for (const k of Object.keys(kc.items())) spawnSync(kc.env.CLOCKWORK_SECURITY_BIN, ['delete-generic-password', '-s', k.split('|')[0], '-a', 'token']);
+    assert.deepEqual(handed().inFiles.map(s => s.name), ['token'], 'still runs from the old file until it is moved');
+    r = cwk('', 'connect', 'keyed'); assert.equal(r.status, 0, r.stderr); assert.match(r.stdout, /could be read by other users of this machine\. Now only you can\./); assert.match(r.stdout, /moved out of .*token into your macOS Keychain\. The file is deleted\./);
+    assert.ok(!fs.existsSync(path.join(data, 'token'))); assert.deepEqual(Object.values(kc.items()), [KEY]); assert.deepEqual(filesHolding(KEY), []);
+
+    // On a machine whose host keeps secrets (a container), the host's variable wins and nothing is asked or stored.
+    const hosted = spawnSync(process.execPath, [CLI, 'connect', 'keyed', '--replace'], { encoding: 'utf8', input: '', env: { ...process.env, CLOCKWORK_DATA: DATA, ...kc.env, CLOCKWORK_SECRET_KEYED_TOKEN: 'tok_from-the-host' } });
+    assert.equal(hosted.status, 0, hosted.stderr); assert.match(hosted.stdout, /set by this machine's own secret store \(CLOCKWORK_SECRET_KEYED_TOKEN\)/); assert.deepEqual(Object.values(kc.items()), [KEY]);
+
+    assert.equal(cwk('', 'remove', 'keyed', '--yes').status, 0); assert.deepEqual(kc.items(), {}, 'removing an extractor removes its key');
+  } finally { fs.rmSync(kc.dir, { recursive: true, force: true }); fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('without a keychain the key goes in a file only the user can read; it cannot be a strange value', async () => {
+  const secrets = await import('../secrets.mjs'); process.env.CLOCKWORK_SECRETS = 'file';
+  try {
+    assert.equal(secrets.getSecret('feed', 'token'), null); secrets.setSecret('feed', 'token', 'tok_plain'); assert.equal(secrets.getSecret('feed', 'token'), 'tok_plain');
+    const f = path.join(DATA, 'secrets', 'feed.json'); assert.equal(fs.statSync(f).mode & 0o777, 0o600); assert.equal(fs.statSync(path.dirname(f)).mode & 0o777, 0o700);
+    for (const bad of ['', 'two\nlines', 'tab\there', 'café']) assert.throws(() => secrets.setSecret('feed', 'token', bad), /plain letters, digits and symbols on one line/);
+    assert.throws(() => secrets.getSecret('../config', 'token'), /not a secret name/);
+    process.env.CLOCKWORK_SECRET_FEED_TOKEN = 'tok_host'; assert.equal(secrets.getSecret('feed', 'token'), 'tok_host'); assert.throws(() => secrets.setSecret('feed', 'token', 'tok_other'), /comes from there/); delete process.env.CLOCKWORK_SECRET_FEED_TOKEN;
+    secrets.deleteSecret('feed', 'token'); assert.equal(secrets.getSecret('feed', 'token'), null); assert.ok(!fs.existsSync(f));
+  } finally { delete process.env.CLOCKWORK_SECRETS; delete process.env.CLOCKWORK_SECRET_FEED_TOKEN; }
+});
+
 test('connect refuses until required files exist, and does not switch the extractor on', () => {
   const r = cw('connect', 'gmail'); assert.notEqual(r.status, 0); assert.match(r.stderr, /client\.json/); assert.equal(lib.findExtractor('gmail', lib.loadConfig()).enabled, false);
 });
@@ -151,15 +222,30 @@ test('supervisor: runs an enabled extractor against the core, picks up enable/di
     got.push({ url: req.url, auth: req.headers.authorization, body: JSON.parse(b || '{}') }); res.end('{"received":1,"new":1}'); }); });
   await new Promise(r => core.listen(0, '127.0.0.1', r));
   const c = lib.loadConfig(); c.port = core.address().port; c.studentPort = 1; c.python = '/nonexistent/python'; c.extractors.mine = { enabled: true }; lib.saveConfig(c);
+  // A second extractor that needs a key. It proves it was handed the key by sending its fingerprint, never the key itself.
+  const KEY = 'tok_made-up_supervised', kdir = path.join(lib.paths.userExtractors(), 'locked'); fs.mkdirSync(kdir, { recursive: true });
+  fs.writeFileSync(path.join(kdir, 'extractor.json'), JSON.stringify({ name: 'locked', source: 'locked', run: { command: 'node', args: ['main.mjs'] }, secrets: [{ name: 'token', prompt: 'Feed token' }] }));
+  fs.writeFileSync(path.join(kdir, 'main.mjs'), `import crypto from 'node:crypto'; const k = process.env.CLOCKWORK_SECRET_TOKEN || '';
+    await fetch(process.env.CLOCKWORK_CORE_URL + '/ingest/events', { method: 'POST', headers: { authorization: 'Bearer ' + process.env.CLOCKWORK_INGEST_TOKEN }, body: JSON.stringify({ source: 'locked', events: [{ sourceId: crypto.createHash('sha256').update(k).digest('hex') }], seesOthers: Object.keys(process.env).filter(n => n.startsWith('CLOCKWORK_SECRET_')) }) });
+    console.log('started'); setInterval(() => {}, 1000);`);
+  const c2 = lib.loadConfig(); c2.extractors.locked = { enabled: true }; lib.saveConfig(c2);
   // Run the supervisor without its own core: point it at the stub by starting only the extractor half through the real entry point.
   const child = spawn(process.execPath, ['-e', `
-    import('${path.join(lib.ROOT, 'cli', 'supervisor.mjs')}').then(async m => { await m.supervise({ startCore: false }); });`], { env: { ...process.env, CLOCKWORK_DATA: DATA }, stdio: 'ignore' });
+    import('${path.join(lib.ROOT, 'cli', 'supervisor.mjs')}').then(async m => { await m.supervise({ startCore: false }); });`], { env: { ...process.env, CLOCKWORK_DATA: DATA, CLOCKWORK_SECRETS: 'file' }, stdio: 'ignore' });
   const until = async (fn, ms = 20000) => { const end = Date.now() + ms; while (Date.now() < end) { if (fn()) return true; await new Promise(r => setTimeout(r, 200)); } return false; };
   try {
     assert.ok(await until(() => got.some(g => g.body.source === 'mine' && g.body.events?.length === 1)), 'the template extractor delivered its item');
     const first = got.find(g => g.body.source === 'mine'); assert.equal(first.url, '/ingest/events'); assert.equal(first.auth, 'Bearer ' + c.tokens.ingest);
     const st = lib.readState(); assert.equal(st.processes.mine.state, 'running'); assert.match(st.processes.scorer.state, /python environment missing/);
     assert.ok(!JSON.stringify(st).includes(c.tokens.ingest), 'state file holds no tokens');
+    assert.ok(await until(() => lib.readState().processes.locked?.state?.startsWith('needs connecting')), 'an extractor whose key is missing waits; it is not started without it');
+    assert.ok(!got.some(g => g.body.source === 'locked'));
+    const secrets = await import('../secrets.mjs'); process.env.CLOCKWORK_SECRETS = 'file'; secrets.setSecret('locked', 'token', KEY); delete process.env.CLOCKWORK_SECRETS;
+    assert.ok(await until(() => got.some(g => g.body.source === 'locked'), 45000), 'once the key is saved it starts by itself');
+    const fromLocked = got.find(g => g.body.source === 'locked'), crypto = await import('node:crypto');
+    assert.equal(fromLocked.body.events[0].sourceId, crypto.createHash('sha256').update(KEY).digest('hex'), 'it was handed its key'); assert.deepEqual(fromLocked.body.seesOthers, ['CLOCKWORK_SECRET_TOKEN'], 'and no other extractor\'s');
+    assert.ok(!JSON.stringify(lib.readState()).includes(KEY), 'the state file holds no key');
+    for (const f of fs.readdirSync(lib.paths.logs())) assert.ok(!fs.readFileSync(path.join(lib.paths.logs(), f), 'utf8').includes(KEY), `${f} holds no key`);
     const pid = st.processes.mine.pid; cw('disable', 'mine');
     assert.ok(await until(() => { try { process.kill(pid, 0); return false; } catch { return true; } }, 25000), 'a disabled extractor is stopped without a restart');
     assert.equal(lib.readState().processes.mine, undefined);

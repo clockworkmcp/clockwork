@@ -10,7 +10,7 @@ allowed to add bots to. It uses Discord's official API and only ever reads.
 - **It cannot read your direct messages**, group chats, or any server the bot is not in. A bot is its own account, not you.
 - It does not read threads, forum posts or voice-channel chat (not yet).
 - It does not use your personal account's token (a "self-bot"). That is against Discord's terms and gets accounts
-  banned. Never put your own account's token in the token file. If you want a server's messages and cannot add a bot
+  banned. Never give it your own account's token. If you want a server's messages and cannot add a bot
   to it, this extractor cannot help.
 
 It never sends a message, adds a reaction or marks anything as read: every request it makes is a read (`GET`), and the
@@ -32,15 +32,9 @@ bot is given no permission to post. It does not connect to Discord's live gatewa
    ```
 
    `66560` is exactly two permissions: **View Channels** and **Read Message History**. Do not give it more.
-4. Save the token, alone on one line, in the extractor's private folder, readable only by you:
-
-   ```bash
-   mkdir -p ~/.clockwork/v2/extractor-data/discord && chmod 700 ~/.clockwork/v2/extractor-data/discord
-   pbpaste > ~/.clockwork/v2/extractor-data/discord/token      # or paste it in with an editor
-   chmod 600 ~/.clockwork/v2/extractor-data/discord/token
-   ```
-
-   (`clockwork connect discord` tells you the exact path if the file is missing.)
+4. Run `clockwork connect discord` in your own terminal and paste the token when asked; nothing is shown as you paste.
+   Clockwork keeps it in your macOS Keychain, not in a file (on a machine with no keychain, in a file only you can
+   read).
 5. `clockwork connect discord`, then `clockwork status`.
 
 Private channels: the bot sees a private channel only if you add the bot (or its role) to that channel in Discord.
@@ -71,7 +65,6 @@ Nothing else. No attachments are downloaded.
 
 In the extractor's private folder (`~/.clockwork/v2/extractor-data/discord/`):
 
-- `token`: the bot token, which you put there. It is never printed or logged.
 - `state.json`: for each channel, the id of the last message read. No message text.
 - `channels.txt` and `me`, if you made them.
 
@@ -88,7 +81,7 @@ The messages themselves go to Clockwork's own database on this machine.
 
 ## The risk
 
-The bot token lets its holder read every channel the bot can see. Keep the file private, and if it leaks, choose
+The bot token lets its holder read every channel the bot can see. Keep it to yourself, and if it leaks, choose
 **Reset Token** in the Developer Portal. Other members of a server can see that a bot is present; add it only where
 you run the server or its owners agree, and remember that their messages are copied to this machine and shown to your
 agent. To stop: `clockwork disable discord`, and remove the bot from the server.

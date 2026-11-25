@@ -22,6 +22,7 @@ COPY core/*.mjs core/
 COPY student/*.py student/
 COPY connectors/gmail/gmail.mjs connectors/gmail/main.mjs connectors/gmail/
 COPY connectors/x-cloud/main.mjs connectors/x-cloud/
+COPY extractors/gmail-imap/main.mjs extractors/gmail-imap/imap.mjs extractors/gmail-imap/mail.mjs extractors/gmail-imap/
 COPY --from=whatsapp /clockwork-whatsapp /usr/local/bin/clockwork-whatsapp
 COPY scripts/run-instance.sh /usr/local/bin/run-instance
 COPY scripts/entrypoint.sh /usr/local/bin/entrypoint

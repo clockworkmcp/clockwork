@@ -3,6 +3,7 @@
 import { spawn, spawnSync } from 'node:child_process'; import fs from 'node:fs'; import os from 'node:os'; import path from 'node:path'; import readline from 'node:readline/promises';
 import { ROOT, LABEL, NAME, paths, dataDir, loadConfig, saveConfig, initConfig, coreUrl, listExtractors, findExtractor, resolveExtractor, manifestProblems,
   plist, plistPath, readState, supervisorAlive, python, writePrivate, version, commitOf, upgradeState, applyUpgrade } from './lib.mjs';
+import { getSecret, setSecret, deleteSecret, secretsFor, legacyValue, hostVar, backend, backendName, tighten } from './secrets.mjs';
 
 const HELP = `clockwork: personal feed triage that runs on your own machine
 
@@ -17,7 +18,8 @@ const HELP = `clockwork: personal feed triage that runs on your own machine
   clockwork demo                 a throwaway copy with made-up messages, to try with your agent before linking any account
 
   clockwork extractors           list extractors and whether each is on
-  clockwork connect <name>       switch an extractor on and link its account (whatsapp, gmail, x, ...)
+  clockwork connect <name>       switch an extractor on and link its account (whatsapp, gmail, x, ...). Asks for any key
+                                 it needs and keeps it in your Keychain; --replace to enter a new one
   clockwork enable|disable <name>
   clockwork add <folder|git-url> add an extractor someone else wrote (shows what it will run and asks first)
   clockwork update <name> [ref]  fetch a newer version of an added extractor (asks first; never happens by itself)
@@ -37,6 +39,36 @@ const api = async (c, pathname, body) => {
 };
 const ask = async q => { if (process.argv.includes('--yes')) return true; if (!process.stdin.isTTY) return false;
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); const a = await rl.question(q + ' [y/N] '); rl.close(); return /^y(es)?$/i.test(a.trim()); };
+/** One answer typed by the user. A key is not shown as it is typed. When nobody is at a terminal, lines piped in are used in order. */
+let piped = null;
+async function askValue(q, hidden) {
+  if (!process.stdin.isTTY) { if (piped === null) { let s = ''; for await (const d of process.stdin) s += d; piped = s.split(/\r?\n/); } return (piped.shift() || '').trim(); }
+  if (!hidden) { const rl = readline.createInterface({ input: process.stdin, output: process.stdout }); const a = await rl.question(q); rl.close(); return a.trim(); }
+  process.stdout.write(q); process.stdin.setRawMode(true); process.stdin.resume(); let v = '';
+  return new Promise(ok => { const done = () => { process.stdin.setRawMode(false); process.stdin.pause(); process.stdin.off('data', on); process.stdout.write('\n'); };
+    const on = d => { for (const ch of d.toString('utf8')) {
+      if (ch === '\r' || ch === '\n' || ch === '\u0004') { done(); return ok(v.trim()); }
+      if (ch === '\u0003') { done(); process.exit(130); }
+      if (ch === '\u007f' || ch === '\b') v = v.slice(0, -1); else if (ch >= ' ') v += ch; } };
+    process.stdin.on('data', on); });
+}
+/** Ask for the keys an extractor needs that are not saved yet, and keep them where keys belong (cli/secrets.mjs). Never printed. */
+async function collectSecrets(name, secrets) {
+  const replace = process.argv.includes('--replace');
+  for (const s of secrets) {
+    const have = getSecret(name, s.name), old = s.file && legacyValue(s.file);
+    if (process.env[hostVar(name, s.name)]) { console.log(`${s.prompt}: set by this machine's own secret store (${hostVar(name, s.name)}).`); continue; }
+    if (old && !have && backend() === 'keychain' && !replace) { setSecret(name, s.name, old); fs.rmSync(s.file, { force: true }); console.log(`${s.prompt}: moved out of ${s.file} into ${backendName()}. The file is deleted.`); continue; }
+    if ((have || old) && !replace) { console.log(`${s.prompt}: already saved. To enter a new one: clockwork connect ${name} --replace`); continue; }
+    if (s.help) console.log(s.help);
+    const v = await askValue(`${s.prompt}${s.hidden === false ? '' : ' (not shown as you type or paste)'}: `, s.hidden !== false);
+    if (!v) die(`Nothing was entered for "${s.prompt}". Linking asks for a key to your account, so run this yourself in a terminal: clockwork connect ${name}\nDo not give it to an agent or paste it into a chat.`);
+    if (s.pattern && !new RegExp(s.pattern).test(v)) die(`That is not shaped like ${/^[aeiou]/i.test(s.prompt) ? 'an' : 'a'} ${s.prompt}, so nothing was saved.`);
+    try { setSecret(name, s.name, v); } catch (e) { die(`Could not save it: ${e.message}`); }
+    if (old) fs.rmSync(s.file, { force: true });
+    console.log(`Saved in ${backendName()}.`);
+  }
+}
 const runHere = (c, env, cwd) => spawnSync(c.command, c.args, { cwd, env, stdio: 'inherit' }).status === 0;
 const ago = t => { if (!t) return 'never'; const s = (Date.now() - new Date(t)) / 1000; return s < 90 ? `${Math.round(s)}s ago` : s < 5400 ? `${Math.round(s / 60)} min ago` : s < 129600 ? `${Math.round(s / 3600)} h ago` : `${Math.round(s / 86400)} d ago`; };
 const table = rows => { const w = rows[0].map((_, i) => Math.max(...rows.map(r => String(r[i] ?? '').length))); for (const r of rows) console.log('  ' + r.map((v, i) => String(v ?? '').padEnd(w[i])).join('  ').trimEnd()); };
@@ -126,7 +158,7 @@ async function fixtureRuns(m, r, dir, files, say) {
   if (broke.length) for (const b of broke) say(false, b); else say(true, `fixtures: still reports in, and sends nothing malformed, with each file cut short or unreadable`);
 }
 /** The starting points `clockwork new` offers, by how the source is reached. */
-const KINDS = { basic: 'the smallest working extractor; start here when nothing below fits', api: 'a service read through its API, with a key the user saves in a file', 'mac-app': 'another app\'s own store on this Mac (a SQLite file), opened read-only' };
+const KINDS = { basic: 'the smallest working extractor; start here when nothing below fits', api: 'a service read through its API, with a key that is asked for and kept in the Keychain', 'mac-app': 'another app\'s own store on this Mac (a SQLite file), opened read-only' };
 
 const commands = {
   async init() {
@@ -183,6 +215,8 @@ const commands = {
       if (!x.enabled) continue; const r = resolveExtractor(x, c); const exe = path.isAbsolute(r.run.command) || r.run.command.startsWith('.') ? fs.existsSync(path.resolve(r.cwd, r.run.command)) : spawnSync('which', [r.run.command], { stdio: 'ignore' }).status === 0;
       row(exe, `extractor ${x.name}: program present`, x.manifest.build ? `clockwork connect ${x.name} builds it${x.manifest.needs ? ` (needs ${x.manifest.needs})` : ''}` : 'see its README');
       if (r.ready) row(fs.existsSync(r.ready), `extractor ${x.name}: account linked`, `clockwork connect ${x.name}`);
+      const keys = secretsFor(x.name, r.secrets); if (r.secrets.length) row(!keys.missing.length, `extractor ${x.name}: key saved`, `clockwork connect ${x.name}`);
+      if (backend() === 'keychain') for (const s of keys.inFiles) row(false, `extractor ${x.name}: its ${s.prompt} is still in a plain file`, `clockwork connect ${x.name} moves it into your Keychain`);
     }
     console.log(bad ? `\n${bad} thing(s) to fix.` : '\nEverything needed is in place.'); process.exitCode = bad ? 1 : 0;
   },
@@ -223,6 +257,8 @@ const commands = {
     const c = need(), x = findExtractor(name, c) || die(`No extractor named "${name}". See: clockwork extractors`); if (x.problems.length) die(`"${name}" cannot run: ${x.problems.join('; ')}`);
     const r = resolveExtractor(x, c), m = x.manifest; fs.mkdirSync(paths.extractorData(name), { recursive: true, mode: 0o700 });
     for (const f of m.requires || []) { const p = String(f.file).replace('{data}', dataDir()).replace('{extractorData}', paths.extractorData(name)); if (!fs.existsSync(p)) die(`${name} needs a file first:\n  ${p}\n${f.help || ''}`); }
+    for (const f of tighten(paths.extractorData(name))) console.log(`${f} could be read by other users of this machine. Now only you can.`);
+    await collectSecrets(name, r.secrets); r.env = { ...r.env, ...secretsFor(name, r.secrets).env };   // only for the linking step below; a trial run (clockwork check) never gets them
     for (const step of ['install', 'build']) if (r[step] && !(m.builtOutput && fs.existsSync(path.resolve(r.cwd, m.builtOutput)))) { console.log(`${step}: ${r[step].command} ${r[step].args.join(' ')}`); if (!runHere(r[step], r.env, r.cwd)) die(`${step} failed${m.needs ? ` (this extractor needs ${m.needs})` : ''}.`); }
     const was = c.extractors[name]?.enabled; c.extractors[name] = { ...(c.extractors[name] || {}), enabled: true }; saveConfig(c);
     if (m.connect?.note) console.log(m.connect.note);
@@ -294,6 +330,7 @@ const commands = {
   async remove(name) {
     const c = need(), x = findExtractor(name, c) || die(`No extractor named "${name}".`); if (x.builtin) die(`"${name}" is built in. Switch it off instead: clockwork disable ${name}`);
     if (!await ask(`Delete the extractor "${name}" from ${x.dir}? Items it already brought in stay.`)) die('Kept.');
+    for (const s of x.manifest?.secrets || []) try { deleteSecret(name, s.name); } catch {}
     fs.rmSync(x.dir, { recursive: true, force: true }); delete c.extractors[name]; saveConfig(c); console.log('Removed.'); restartHint();
   },
 

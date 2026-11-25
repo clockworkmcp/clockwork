@@ -5,6 +5,13 @@ What changed for someone running Clockwork, newest first. `clockwork version` sh
 
 ## Unreleased
 
+- **Account keys move out of plain files into your Keychain.** `clockwork connect` now asks for the token or app
+  password itself, without showing it, and keeps it in the macOS Keychain. This covers GitHub, GitLab, Linear, Discord,
+  Slack and the new Gmail app-password extractor. **If you saved a token file before, run `clockwork connect <name>`
+  once:** it moves the token into the Keychain and deletes the file. Until then the old file keeps working, and
+  `clockwork doctor` points it out. Files that other users of the machine could read are tightened automatically.
+  Bluesky, Jira and Mastodon logins, and the sessions that WhatsApp, X, Google and Microsoft hand back, are still files
+  only you can read.
 - **Templates by kind.** `clockwork new <name> api` starts an extractor for a service with an API and a key;
   `clockwork new <name> mac-app` starts one that reads another app's store on this Mac. `clockwork new <name>` alone
   still gives the small one.

@@ -24,7 +24,8 @@ const stateFile = path.join(DATA, 'state.json'), tokenFile = path.join(DATA, 'to
 const loadState = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return {}; } };
 const saveState = s => { fs.mkdirSync(DATA, { recursive: true, mode: 0o700 }); fs.writeFileSync(stateFile + '.tmp', JSON.stringify(s), { mode: 0o600 }); fs.renameSync(stateFile + '.tmp', stateFile); };
 const readLine = name => { try { return fs.readFileSync(path.join(DATA, name), 'utf8').trim(); } catch { return ''; } };
-const readToken = () => readLine('token').replace(/^Bot\s+/i, '');
+/** The token: from the Keychain, handed over by Clockwork. The file is where it used to be kept. */
+const readToken = () => (process.env.CLOCKWORK_SECRET_TOKEN?.trim() || readLine('token')).replace(/^Bot\s+/i, '');
 /** channels.txt: one channel id per line; anything after # is a comment. No file (or no ids in it) means every channel. */
 const allowList = () => { const ids = readLine('channels.txt').split('\n').map(l => l.replace(/#.*/, '').trim()).filter(l => /^\d+$/.test(l)); return ids.length ? new Set(ids) : null; };
 

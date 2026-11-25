@@ -49,6 +49,7 @@ Size limit: 8 MB per request. Send large backlogs in batches of a few hundred.
 | `CLOCKWORK_CORE_URL` | Address of the core. |
 | `CLOCKWORK_INGEST_TOKEN` | A token that can only write items. It cannot read anything back. |
 | `CLOCKWORK_EXTRACTOR_DATA` | A private folder for the extractor's own state and credentials. |
+| `CLOCKWORK_SECRET_<NAME>` | Each key the manifest's `secrets` asked the user for, e.g. `CLOCKWORK_SECRET_TOKEN`. Only this extractor's own. |
 | `CLOCKWORK_FIXTURES` | Only during `clockwork check`: a folder of sample input to read instead of the real source. See [Fixtures](#fixtures). |
 
 Plus `PATH`, `HOME` and locale, and whatever the manifest's `env` adds. It does not get the admin token, the agent token or
@@ -64,7 +65,8 @@ any model key.
   "install": { "command": "npm", "args": ["ci"] },
   "run": { "command": "node", "args": ["main.mjs"] },
   "env": { "MY_SETTING": "{extractorData}/settings.json" },
-  "requires": [{ "file": "{extractorData}/api-key", "help": "Where to get it and how to save it." }],
+  "secrets": [{ "name": "token", "prompt": "My Source token", "help": "Where to get a read-only one.", "pattern": "^ms_" }],
+  "requires": [{ "file": "{extractorData}/settings.json", "help": "What to put in it." }],
   "ready": { "file": "{extractorData}/token.json" },
   "connect": { "type": "command", "command": "node", "args": ["main.mjs", "auth"], "note": "What the user will be asked to do." },
   "restartSeconds": 60
@@ -74,7 +76,13 @@ any model key.
 - `name`: lower-case letters, digits and dashes, starting with a letter. `source`: the name items are filed under; several extractors may share one.
 - `run` (required): started in the extractor's folder and kept running. If it exits it is started again after `restartSeconds`.
 - `install`, `build`: run once by `clockwork connect <name>`.
-- `requires`: files the user must supply before connecting; `help` is shown if one is missing.
+- `secrets`: the keys to the user's account (an API token, an app password). `clockwork connect` asks for each, without
+  showing what is typed, checks it against `pattern` if there is one, and keeps it in the macOS Keychain (elsewhere, a
+  file only the user can read; on a hosted machine, the host's secret store). The program gets it in
+  `CLOCKWORK_SECRET_<NAME>` each time it starts, and is not started until every one is there. **Never ask for a key in
+  a `requires` file, and never write one to disk yourself.** `"hidden": false` is for what is not secret (an address);
+  `"file": "{extractorData}/token"` names a file that used to hold the key, which `connect` moves and deletes.
+- `requires`: other files the user must supply before connecting (settings, not keys); `help` is shown if one is missing.
 - `ready`: the extractor is not started until this file exists (typically the saved login).
 - `connect`: how the user links their account. `command` runs a program in the terminal; `open` shows a page served by the
   extractor on this machine (`http://127.0.0.1:...` only); `flag` creates a file the running extractor watches for.
@@ -97,7 +105,7 @@ Pick the template by how the source is reached:
 | Kind | When | What it already does |
 |---|---|---|
 | `basic` (the default) | nothing below fits | reports in, keeps state, about fifty lines |
-| `api` | the service has an API you call with a key or token the user saves in a file | sends the key to one host only, paces its requests, waits when the service says to, reports `needs_login` when the key stops working, reads newest-first pages back to what it has |
+| `api` | the service has an API you call with a key or token | asks for the key and keeps it in the Keychain, sends it to one host only, paces its requests, waits when the service says to, reports `needs_login` when the key stops working, reads newest-first pages back to what it has |
 | `mac-app` | the source is another app's own store on this Mac, a SQLite file | opens the store read-only, reports `needs_login` until macOS allows it, names the table or column an app update took away, reads rows newer than the last one |
 
 Each is plain Node with no dependencies. An agent can write an extractor for you from one of them and this page. Its own

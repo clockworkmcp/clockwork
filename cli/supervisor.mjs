@@ -2,6 +2,7 @@
 // enabled extractor are restarted in place. State goes to run/state.json (no message content), output to logs/<name>.log.
 import { spawn } from 'node:child_process'; import fs from 'node:fs'; import path from 'node:path';
 import { ROOT, paths, loadConfig, listExtractors, resolveExtractor, coreEnv, studentEnv, coreUrl, python, writePrivate, supervisorAlive } from './lib.mjs';
+import { secretsFor, tighten } from './secrets.mjs';
 
 const MAX_LOG = 5 * 1024 * 1024;
 export function logStream(name) {
@@ -26,7 +27,7 @@ export async function supervise({ config = loadConfig(), firstTrainMs = 10 * 60e
     if (blocked === 'off') return;
     if (blocked) { if (state.processes[name]?.state !== blocked) { set(name, { kind, state: blocked, pid: undefined }); log(`[${name}] ${blocked}`); } return later(30e3, () => keep(name, arguments[1])); }
     const fd = logStream(name); let child;
-    try { child = spawn(command, args, { cwd, env, stdio: ['ignore', fd, fd] }); } finally { fs.closeSync(fd); }
+    try { child = spawn(command, args, { cwd, env: typeof env === 'function' ? env() : env, stdio: ['ignore', fd, fd] }); } finally { fs.closeSync(fd); }
     children.set(name, child); set(name, { kind, state: 'running', pid: child.pid, restarts: (state.processes[name]?.restarts ?? -1) + 1 });
     const again = why => { if (children.get(name) !== child) return; children.delete(name); if (stopping) return; set(name, { kind, state: 'restarting', pid: undefined, last: why }); log(`[${name}] ${why}; again in ${pause}s`); later(pause * 1000, () => keep(name, arguments[1])); };
     child.on('error', e => again(`could not start: ${e.message}`)); child.on('exit', (code, sig) => again(`exited with ${sig || code}`));
@@ -57,8 +58,9 @@ export async function supervise({ config = loadConfig(), firstTrainMs = 10 * 60e
     try { fs.rmSync(paths.pid(), { force: true }); state.stoppedAt = new Date().toISOString(); for (const p of Object.values(state.processes)) { p.state = 'stopped'; delete p.pid; } save(); } catch {} };
   process.once('SIGTERM', () => stop('asked to stop')); process.once('SIGINT', () => stop('interrupted'));
 
-  // Extractors: each enabled one, with only the write-only ingest token in its environment. The list is re-read every few
-  // seconds, so `clockwork connect`, `enable`, `disable` and `remove` take effect without a restart.
+  // Extractors: each enabled one, with only the write-only ingest token and its own account keys in its environment. The keys
+  // are read from where they are kept (cli/secrets.mjs) each time it starts and are never written to the state file or a log.
+  // The list is re-read every few seconds, so `clockwork connect`, `enable`, `disable` and `remove` take effect without a restart.
   const wanted = new Map();
   const reconcile = () => {
     const fresh = loadConfig() || config; const on = new Map(listExtractors(fresh).filter(x => x.enabled).map(x => [x.name, x]));
@@ -66,8 +68,9 @@ export async function supervise({ config = loadConfig(), firstTrainMs = 10 * 60e
     for (const [name, x] of on) {
       if (wanted.has(name)) continue; wanted.set(name, x);
       const r = resolveExtractor(x, fresh); fs.mkdirSync(paths.extractorData(name), { recursive: true, mode: 0o700 });
-      keep(name, { kind: x.builtin ? 'extractor' : 'extractor (added)', command: r.run.command, args: r.run.args, cwd: r.cwd, env: r.env, pause: Number(x.manifest.restartSeconds) || 60,
-        gate: () => wanted.get(name) !== x ? 'off' : r.ready && !fs.existsSync(r.ready) ? `needs connecting (clockwork connect ${name})` : null });
+      for (const f of tighten(paths.extractorData(name))) log(`[${name}] ${f} could be read by other users of this machine; now only you can`);
+      keep(name, { kind: x.builtin ? 'extractor' : 'extractor (added)', command: r.run.command, args: r.run.args, cwd: r.cwd, env: () => ({ ...r.env, ...secretsFor(name, r.secrets).env }), pause: Number(x.manifest.restartSeconds) || 60,
+        gate: () => wanted.get(name) !== x ? 'off' : (r.ready && !fs.existsSync(r.ready)) || secretsFor(name, r.secrets).missing.length ? `needs connecting (clockwork connect ${name})` : null });
     }
   };
   // Wait for the core to answer before starting extractors, so their first delivery is not lost to a start-up race.

@@ -51,7 +51,7 @@ clockwork enable <name>
 ```
 
 1. Read `docs/EXTRACTORS.md` (the contract). Pick the template by how the source is reached: `api` for a service with
-   an API and a key the user saves, `mac-app` for another app's own store on this Mac, `basic` otherwise. Change what
+   an API and a key, `mac-app` for another app's own store on this Mac, `basic` otherwise. Change what
    its `main.mjs` marks "Replace".
 2. Prefer the service's official API with the narrowest read-only permission it offers. If the only way is an unofficial
    one, tell the user that and the risk to their account before writing it.
@@ -60,8 +60,10 @@ clockwork enable <name>
 4. Go slowly on the service: a pause between calls, back off when it says to, never retry in a tight loop.
 5. Give every item a stable `sourceId` so nothing is brought in twice, and mark old items brought in on the first run
    with `origin: "history"`.
-6. If it needs a credential, declare the file in `extractor.json` under `requires` with a `help` line, so
-   `clockwork connect` tells the user where to save it.
+6. If it needs a key or password, declare it in `extractor.json` under `secrets` with a `help` line. `clockwork connect`
+   then asks the user for it in their own terminal and keeps it in their Keychain; your program reads it from
+   `CLOCKWORK_SECRET_<NAME>`. Never have the user save a key in a file, never write one to disk, and never see it
+   yourself: the user runs `clockwork connect <name>`, not you.
 7. Write the sample input in `fixtures/` to match what the source really gives, **with every name, address, id and
    message made up**. Learn the shape from the service's documentation, or from the user's real data read-only, but
    never copy a real value into a file. `clockwork check` runs your code over it offline, whole and damaged.

@@ -1,4 +1,5 @@
-// A Clockwork extractor for a service you read through its API with a key the user saves in a file.
+// A Clockwork extractor for a service you read through its API with a key. `clockwork connect` asks the user for the key
+// (extractor.json, "secrets"), keeps it in their Keychain, and hands it to this program in CLOCKWORK_SECRET_KEY.
 // It needs nothing but Node. The contract is in docs/EXTRACTORS.md. Read-only: every request below is a GET, and it
 // should stay that way. Ask the service for the narrowest read-only key it offers.
 // What to change is marked "Replace". Everything else (pacing, backing off, saying when the key stopped working,
@@ -7,7 +8,7 @@ import fs from 'node:fs'; import path from 'node:path';
 
 const CORE = process.env.CLOCKWORK_CORE_URL || 'http://127.0.0.1:4600';
 const TOKEN = process.env.CLOCKWORK_INGEST_TOKEN || '';
-const DATA = process.env.CLOCKWORK_EXTRACTOR_DATA || '.';       // a private folder for this extractor's key and state
+const DATA = process.env.CLOCKWORK_EXTRACTOR_DATA || '.';       // a private folder for this extractor's state. Never write the key there.
 const FIXTURES = process.env.CLOCKWORK_FIXTURES || '';          // set by `clockwork check`: read the sample answers in this folder, contact nobody
 const SOURCE = JSON.parse(fs.readFileSync(new URL('./extractor.json', import.meta.url), 'utf8')).source;
 const ONCE = process.argv.includes('--once');
@@ -20,7 +21,7 @@ const FIRST_HOURS = 24;                                         // how far back 
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 class NeedsLogin extends Error {}
-const readKey = () => { try { return fs.readFileSync(path.join(DATA, 'key'), 'utf8').trim(); } catch { return ''; } };
+const readKey = () => (process.env.CLOCKWORK_SECRET_KEY || '').trim();
 
 async function send(events, status = 'ok') {
   const r = await fetch(CORE + '/ingest/events', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + TOKEN },

@@ -21,12 +21,16 @@ const stateFile = path.join(DATA, 'state.json');
 const loadState = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return {}; } };
 const saveState = s => { fs.mkdirSync(DATA, { recursive: true, mode: 0o700 }); fs.writeFileSync(stateFile + '.tmp', JSON.stringify(s), { mode: 0o600 }); fs.renameSync(stateFile + '.tmp', stateFile); };
 
-/** The address and app password the user saved, or `{ problem }`. Anything that is not shaped like an app password is refused and sent nowhere. */
-export function readLogin(file = path.join(DATA, 'login.json')) {
-  let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return { problem: `no readable login file at ${file}` }; }
-  const address = String(j?.address || '').trim().toLowerCase(), password = String(j?.appPassword || '').replace(/[\s-]+/g, '');
-  if (!/^[^\s@"\\]+@[^\s@"\\]+\.[^\s@"\\]+$/.test(address)) return { problem: '"address" in login.json is not an email address' };
-  if (!/^[a-z]{16}$/i.test(password)) return { problem: '"appPassword" in login.json does not look like a Google app password (sixteen letters). Never put your normal Google password in that file.' };
+/**
+ * The address and app password, or `{ problem }`. Clockwork keeps them in the Keychain (or the host's secret store) and
+ * hands them to this program in its environment each time it starts; this program never reads or writes them on disk.
+ * Anything that is not shaped like an app password is refused and sent nowhere.
+ */
+export function readLogin(env = process.env) {
+  const address = String(env.CLOCKWORK_SECRET_ADDRESS || '').trim().toLowerCase(), password = String(env.CLOCKWORK_SECRET_APP_PASSWORD || '').replace(/[\s-]+/g, '');
+  if (!address && !password) return { problem: 'no address and app password saved yet' };
+  if (!/^[^\s@"\\]+@[^\s@"\\]+\.[^\s@"\\]+$/.test(address)) return { problem: 'the saved address is not an email address' };
+  if (!/^[a-z]{16}$/i.test(password)) return { problem: 'what is saved does not look like a Google app password (sixteen letters). Never give Clockwork your normal Google password' };
   return { address, password };
 }
 
@@ -79,10 +83,10 @@ export async function sync(imap, state = {}, { firstMs = FIRST_MS, maxPass = MAX
 }
 
 const LOGIN_HELP = `Gmail did not accept the app password. Check that:
-  - the address in login.json is the account the app password was made for;
+  - the address you gave is the account the app password was made for;
   - 2-Step Verification is still on for the account (Google removes app passwords when it is switched off, and when the account's password changes);
   - the account is allowed to use app passwords and IMAP (a work or school account may have them switched off by its administrator).
-Make a new app password at https://myaccount.google.com/apppasswords, save it in login.json, and run: clockwork connect gmail-imap`;
+Make a new app password at https://myaccount.google.com/apppasswords and run: clockwork connect gmail-imap --replace`;
 
 /** With `clockwork check`: sample mail from files, so the reading code runs with no account and no network. */
 async function fixturePass() {
@@ -91,11 +95,11 @@ async function fixturePass() {
   await send(items);
 }
 
-let imap = null;                                                     // one connection, kept between passes; the password is held in memory only while signing in
+let imap = null;                                                     // one connection, kept between passes
 async function pass() {
   if (FIXTURES) return fixturePass();
   const login = readLogin();
-  if (login.problem) { await send([], 'needs_login'); console.error(`not signed in: ${login.problem}. Steps: extractors/gmail-imap/README.md`); return; }
+  if (login.problem) { await send([], 'needs_login'); console.error(`not signed in: ${login.problem}. Run: clockwork connect gmail-imap --replace`); return; }
   try {
     if (!imap || imap.closed) { imap = await openImap(); await imap.login(login.address, login.password); }
     const res = await sync(imap, loadState()); let fresh = 0;

@@ -3,7 +3,6 @@
   "source": "github",
   "description": "Your GitHub notifications (mentions, review requests, assignments, failed runs, security alerts), read through GitHub's own API with a token you create. Read-only: it never marks anything as read.",
   "run": { "command": "node", "args": ["main.mjs"] },
-  "requires": [{ "file": "{extractorData}/token", "help": "On GitHub open Settings, Developer settings, Personal access tokens, Tokens (classic), choose \"Generate new token (classic)\", tick only the \"notifications\" box, and save the token (starts with ghp_) in that file. A fine-grained token does not work: GitHub's notifications API only accepts classic tokens. Steps: extractors/github/README.md. For a work account, your employer's rules decide whether you may do this at all." }],
-  "ready": { "file": "{extractorData}/token" },
+  "secrets": [{ "name": "token", "prompt": "GitHub token", "help": "On GitHub open Settings, Developer settings, Personal access tokens, Tokens (classic), choose \"Generate new token (classic)\", tick only the \"notifications\" box, and paste the token (starts with ghp_) when asked. A fine-grained token does not work: GitHub's notifications API only accepts classic tokens. Steps: extractors/github/README.md. For a work account, your employer's rules decide whether you may do this at all.", "file": "{extractorData}/token" }],
   "restartSeconds": 60
 }

@@ -21,6 +21,7 @@ Corrections sent through `record_feedback` outrank teacher labels at the next re
 - `student/` Python scorer (`serve.py`) and trainer (`train.py`, promotes a new head only if it does not regress).
 - `connectors/whatsapp/` Go companion-device worker; read-only; QR link page on port 4599.
 - `connectors/gmail/` Node worker: read-only Gmail API, incremental sync by history id. Run `node main.mjs auth` once, then `node main.mjs`.
+- `extractors/gmail-imap/` Node worker: Gmail over IMAP with an app password, as an alternative to `connectors/gmail/`.
 - `connectors/x-cloud/` optional: a browser on the instance itself that reads the X home timeline on a schedule (see below).
 
 ## Run locally
@@ -63,6 +64,14 @@ fly secrets import --app clockwork-<user> < secrets.env      # the three tokens 
 fly deploy --app clockwork-<user> --ha=false                  # exactly one machine: two would fight over the WhatsApp session
 fly proxy 4599 --app clockwork-<user>                         # then open http://127.0.0.1:4599 to link WhatsApp
 ```
+
+**Account keys on a hosted machine** come from the host's secret store, never from a file on the volume. For Gmail with an
+app password, put `CLOCKWORK_SECRET_GMAIL_IMAP_ADDRESS` and `CLOCKWORK_SECRET_GMAIL_IMAP_APP_PASSWORD` in the same
+`secrets.env` (and leave `/data/gmail` unauthorized: use one Gmail reader, not both). Fly keeps secrets encrypted and
+hands them to the machine as environment variables when it starts; inside the container the app password is removed
+from every process except the Gmail reader. Anyone with access to the hosting account can still read it, as they can
+everything else on the instance. The image runs the two Gmail readers, WhatsApp and X; the other extractors only run
+under `clockwork run` on your own machine, where their keys live in the Keychain.
 
 The core is served over HTTPS at `https://clockwork-<user>.fly.dev`. Put that address plus the agent token in
 your agent's MCP settings (`/mcp`). On any other Docker
@@ -183,7 +192,7 @@ Set `CLOCKWORK_TZ` (an IANA name such as `Europe/Paris`) so times written in mes
 
 - The teacher is capped at `CLOCKWORK_TEACHER_DAILY_ITEMS` labels per day (default 3000). Over the cap, items are held as `later`.
 - `POST /audit {"n": 40}` has the teacher re-check a random sample of the student's own decisions.
-- The database, WhatsApp session and Gmail token are stored unencrypted on the volume. Anyone with access to the hosting
+- The database, WhatsApp session and Gmail API token are stored unencrypted on the volume (the Gmail app password is not on it). Anyone with access to the hosting
   account can read them, and message text is sent to Anthropic when the teacher is consulted.
 - Events are never pruned yet, so watch the volume size.
 

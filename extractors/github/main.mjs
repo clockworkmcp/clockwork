@@ -83,7 +83,7 @@ async function latestComment(token, api, n, closed) {
 }
 
 async function pass() {
-  const token = readFile('token');
+  const token = process.env.CLOCKWORK_SECRET_TOKEN?.trim() || readFile('token');   // from the Keychain, handed over by Clockwork; the file is where it used to be kept
   if (!token) { await send([], 'needs_login'); return; }
   const api = apiBase(), state = loadState(); state.seen ||= {};
   if (Date.now() < Math.max(state.pollAfter || 0, notBefore)) { await send([], state.limited ? 'rate_limited' : 'ok'); return; }   // GitHub said when to come back

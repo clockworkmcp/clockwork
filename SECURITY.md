@@ -11,8 +11,11 @@ bounty. Never include real message content, tokens or session files in a report.
 Clockwork runs as you, on your machine, and holds your message history, the sessions for the accounts you linked, and
 three access tokens. It trusts:
 
-- **Your user account and your disk.** Anyone who can read your home folder can read everything. Data is not encrypted
-  beyond the disk's own encryption.
+- **Your user account and your disk.** Anyone who can read your home folder can read your messages and the sessions
+  of the accounts you linked. That data is not encrypted beyond the disk's own encryption. The keys `clockwork connect`
+  asks for are kept in the macOS Keychain instead, which protects them from anything that only reads files (a backup, a
+  synced folder, another user) but not from a program already running as you: it can ask the Keychain the same way
+  Clockwork does.
 - **The agent you give the agent token to.** It can read every item and label it, including as `ignore`.
 - **Every extractor you switch on.** An extractor is a program that runs as you. Built-in ones are reviewed with the
   project. Added ones are not reviewed by anyone and are not sandboxed.
@@ -22,6 +25,10 @@ three access tokens. It trusts:
 - **Nothing sends.** No code path in the core or the built-in extractors sends, replies, reacts, posts or marks as read.
 - **Local only by default.** The core, the model and the link pages listen on `127.0.0.1`. A public address exists only
   if you set `publicUrl` yourself.
+- **Account keys stay out of the data folder.** A key asked for by `clockwork connect` goes to the macOS Keychain (or,
+  on a machine whose host has a secret store, comes from there). It is never printed, never written to the state file
+  or a log, and handed only to the extractor it belongs to, each time that extractor starts. A trial run
+  (`clockwork check`) never receives one. Where there is no keychain it is a file only the user can read.
 - **Three tokens with separate powers.** Admin (everything), agent (`POST /mcp` only), ingest (write items only, never
   read). Extractors receive only the ingest token, and a manifest cannot override Clockwork's tokens or addresses.
 - **Extractors are never installed or updated from the network without you.** `clockwork add` and `clockwork update`

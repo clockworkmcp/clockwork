@@ -3,7 +3,6 @@
   "source": "discord",
   "description": "Messages from the text channels of Discord servers that a bot of your own has been added to, read through Discord's official API. Read-only: it only ever asks Discord for messages and never posts.",
   "run": { "command": "node", "args": ["main.mjs"] },
-  "requires": [{ "file": "{extractorData}/token", "help": "Create a bot of your own at https://discord.com/developers/applications (New Application, then Bot), switch on \"Message Content Intent\" on its Bot page, add it to a server you run or may add bots to with only the View Channels and Read Message History permissions, and save the bot's token in that file. Steps: extractors/discord/README.md. Never put your personal account's token there: that is against Discord's rules and gets accounts banned." }],
-  "ready": { "file": "{extractorData}/token" },
+  "secrets": [{ "name": "token", "prompt": "Discord bot token", "help": "Create a bot of your own at https://discord.com/developers/applications (New Application, then Bot), switch on \"Message Content Intent\" on its Bot page, add it to a server you run or may add bots to with only the View Channels and Read Message History permissions, and paste the bot's token when asked. Steps: extractors/discord/README.md. Never give it your personal account's token: that is against Discord's rules and gets accounts banned.", "file": "{extractorData}/token" }],
   "restartSeconds": 60
 }

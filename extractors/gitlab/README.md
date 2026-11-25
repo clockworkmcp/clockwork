@@ -10,11 +10,12 @@ It only reads. It never marks a to-do as done, never comments, never changes any
 1. On GitLab: select your avatar, **Edit profile**, **Access**, **Personal access tokens**, and create a token. If GitLab
    offers a choice, pick the ordinary ("legacy") kind.
 2. Give it a name, pick an expiry date, and tick **only** the `read_api` scope.
-3. Copy the token (it starts with `glpat-`) and save it as the only line of the file `token` in this extractor's private
-   folder (`clockwork connect gitlab` tells you where that is). Only you should be able to read that file.
-4. If your GitLab is not gitlab.com, save its address, for example `https://gitlab.example.com`, as the only line of a
-   file named `host` next to `token`. It must start with `https://`.
-5. `clockwork check gitlab`, then `clockwork enable gitlab`.
+3. If your GitLab is not gitlab.com, save its address, for example `https://gitlab.example.com`, as the only line of
+   `~/.clockwork/v2/extractor-data/gitlab/host`. It must start with `https://`.
+4. Copy the token (it starts with `glpat-`). Run `clockwork connect gitlab` in your own terminal and paste it when asked;
+   nothing is shown as you paste. Clockwork keeps it in your macOS Keychain, not in a file (on a machine with no
+   keychain, in a file only you can read).
+5. `clockwork check gitlab`.
 
 **The permission.** `read_api` lets the token read through GitLab's API and change nothing. It does reach more than the
 To-Do List: it can read whatever you can read on that GitLab. GitLab has no narrower scope that covers to-dos.
@@ -35,7 +36,7 @@ Nothing else.
 
 ## What it keeps
 
-In its private folder: your `token`, the optional `host`, and `state.json` with the numbers and times of the to-dos it has
+In its private folder: the optional `host`, and `state.json` with the numbers and times of the to-dos it has
 already sent. No to-do text is kept there.
 
 ## Limits
@@ -49,7 +50,7 @@ already sent. No to-do text is kept there.
 
 ## Risks
 
-- The token can read everything you can read on that GitLab. Anyone who can read the `token` file can do the same. Give
+- The token can read everything you can read on that GitLab. Anyone who gets hold of it can do the same. Give
   it an expiry date and revoke it on GitLab when you stop using this.
 - A work account belongs to your employer. Whether you may create a token and bring your to-dos into a tool on your own
   machine is their decision; some GitLab servers do not allow personal tokens at all.

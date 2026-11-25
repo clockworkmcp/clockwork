@@ -16,15 +16,12 @@ unread count in Gmail stays exactly as it was.
 
 1. Your Google account needs **2-Step Verification**. Then open <https://myaccount.google.com/apppasswords>, make an
    app password, and name it "clockwork".
-2. Google shows sixteen letters once. Save them in `~/.clockwork/v2/extractor-data/gmail-imap/login.json`:
+2. Google shows sixteen letters once. Run `clockwork connect gmail-imap` in your own terminal. It asks for your address
+   and then the app password; nothing is shown as you type or paste it. It signs in once to check, and tells you which
+   folder it will read.
 
-   ```json
-   { "address": "you@gmail.com", "appPassword": "abcd efgh ijkl mnop" }
-   ```
-
-   Keep the file to yourself: `chmod 600` it. **Never put your normal Google password in this file.** The program
-   refuses anything that is not shaped like an app password and sends it nowhere.
-3. Run `clockwork connect gmail-imap`. It signs in once and tells you which folder it will read.
+**Never give it your normal Google password.** It refuses anything that is not shaped like an app password and sends it
+nowhere. Do not paste the app password into a chat with your agent either: type it into the terminal yourself.
 
 Google does not offer app passwords for every account: not with Advanced Protection, not where only security keys are
 allowed, and not where a work or school administrator has switched them off. Use the `gmail` extractor for those.
@@ -40,10 +37,14 @@ no read-only kind. What keeps this read-only is the program itself:
 - its mail client ([imap.mjs](imap.mjs)) can send six commands, all of which only read or sign in and out, and a test
   checks that nothing else is ever sent.
 
-The app password sits in `login.json` on your disk, unencrypted, like the rest of Clockwork's data. If that worries you
-more than fifteen minutes in the Google Cloud console, use the `gmail` extractor: its access is read-only at Google's
-end. You can take an app password back at any time on the same Google page, and Google removes all of them when you
-change your account password.
+**Where the app password is kept.** In your macOS Keychain, not in a file. Clockwork hands it to this program each
+time it starts, and to no other extractor. That keeps it out of backups, synced folders and anything else that reads
+files. It does not protect it from a program already running as you, which can ask the Keychain the same way. On a
+machine with no keychain it is kept in a file only you can read; on a remote machine it comes from the host's secret
+store ([docs/REFERENCE.md](../../docs/REFERENCE.md), "Run in the cloud"). If that still worries you more than fifteen
+minutes in the Google Cloud console, use the `gmail` extractor: its access is read-only at Google's end. You can take
+an app password back at any time on the same Google page, and Google removes all of them when you change your account
+password. To enter a new one: `clockwork connect gmail-imap --replace`.
 
 ## What it reads
 
@@ -63,8 +64,8 @@ change your account password.
 
 ## What it stores
 
-In `~/.clockwork/v2/extractor-data/gmail-imap/`: `login.json` (yours) and `state.json` (which folder, and the number of
-the last message read). No mail is kept there; items go to Clockwork's own database.
+In `~/.clockwork/v2/extractor-data/gmail-imap/`: `state.json` (which folder, and the number of the last message read).
+No mail and no password is kept there; items go to Clockwork's own database.
 
 ## Settings
 

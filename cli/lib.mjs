@@ -46,6 +46,11 @@ export function manifestProblems(m) {
   if (c !== undefined && !(c && ((c.type === 'open' && typeof c.url === 'string' && /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(c.url)) || (c.type === 'command' && isCmd(c)) || (c.type === 'flag' && typeof c.file === 'string'))))
     out.push('"connect" must be { type: "open", url: "http://127.0.0.1:..." }, { type: "command", command, args } or { type: "flag", file }');
   if (m.restartSeconds !== undefined && !(Number(m.restartSeconds) >= 10)) out.push('"restartSeconds" must be at least 10');
+  const isRegExp = p => { try { new RegExp(p); return true; } catch { return false; } };
+  if (m.secrets !== undefined && !(Array.isArray(m.secrets) && m.secrets.length <= 8 && new Set(m.secrets.map(s => s?.name)).size === m.secrets.length && m.secrets.every(s => s && /^[a-z][a-z0-9-]{0,30}$/.test(s.name || '') && typeof s.prompt === 'string' && s.prompt
+    && (s.help === undefined || typeof s.help === 'string') && (s.hidden === undefined || typeof s.hidden === 'boolean') && (s.pattern === undefined || (typeof s.pattern === 'string' && isRegExp(s.pattern)))
+    && (s.file === undefined || (typeof s.file === 'string' && /^\{extractorData\}\/[^/]+$/.test(s.file) && !s.file.includes('..'))))))
+    out.push('"secrets" must be a list of { "name": "token", "prompt": "what to ask for" }, optionally with "help", "pattern", "hidden" and "file" (a file directly in {extractorData} that used to hold it)');
   return out;
 }
 const fill = (s, vars) => String(s).replace(/\{(data|dir|extractorData)\}/g, (_, k) => vars[k]);
@@ -71,7 +76,7 @@ export const findExtractor = (name, config) => listExtractors(config).find(x => 
 export function resolveExtractor(x, config) {
   const vars = { data: dataDir(), dir: path.resolve(x.dir, x.manifest.cwd || '.'), extractorData: paths.extractorData(x.name) };
   const m = x.manifest, cmd = c => c && { command: fill(c.command, vars), args: (c.args || []).map(a => fill(a, vars)) };
-  return { cwd: vars.dir, run: cmd(m.run), install: cmd(m.install), build: cmd(m.build), ready: m.ready && fill(m.ready.file, vars),
+  return { cwd: vars.dir, run: cmd(m.run), install: cmd(m.install), build: cmd(m.build), ready: m.ready && fill(m.ready.file, vars), secrets: (m.secrets || []).map(s => ({ ...s, file: s.file && fill(s.file, vars) })),
     connect: m.connect && { ...m.connect, ...(m.connect.type === 'command' ? cmd(m.connect) : {}), ...(m.connect.file ? { file: fill(m.connect.file, vars) } : {}) },
     env: extractorEnv(config, x.name, Object.fromEntries(Object.entries(m.env || {}).map(([k, v]) => [k, fill(v, vars)]))) };
 }

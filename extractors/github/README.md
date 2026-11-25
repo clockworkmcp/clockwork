@@ -12,9 +12,10 @@ list through the API leaves your GitHub inbox exactly as it was.
 1. On GitHub: **Settings**, **Developer settings**, **Personal access tokens**, **Tokens (classic)**, then
    **Generate new token (classic)**.
 2. Give it a name, pick an expiry date, and tick **only** the `notifications` box. Leave everything else unticked.
-3. Copy the token (it starts with `ghp_`) and save it as the only line of the file `token` in this extractor's private
-   folder (`clockwork connect github` tells you where that is). Only you should be able to read that file.
-4. `clockwork check github`, then `clockwork enable github`.
+3. Copy the token (it starts with `ghp_`). Run `clockwork connect github` in your own terminal and paste it when asked;
+   nothing is shown as you paste. Clockwork keeps it in your macOS Keychain, not in a file (on a machine with
+   no keychain, in a file only you can read).
+4. `clockwork check github`.
 
 **Why a classic token.** GitHub's documentation for the notifications API says it only accepts classic personal access
 tokens, with the `notifications` or `repo` scope. The newer fine-grained tokens are not accepted, and the notifications
@@ -43,7 +44,7 @@ Nothing else.
 
 ## What it keeps
 
-In its private folder: your `token`, and `state.json` with the time it last looked, which threads it has already sent,
+In its private folder: `state.json` with the time it last looked, which threads it has already sent,
 and when GitHub allows the next look. No notification text is kept there.
 
 ## Limits
@@ -59,7 +60,7 @@ and when GitHub allows the next look. No notification text is kept there.
 
 ## Risks
 
-- The token is a key to your notifications. Anyone who can read the `token` file can read them, and could mark them as
+- The token is a key to your notifications. Anyone who gets hold of it can read them, and could mark them as
   read. Give it an expiry date and delete it on GitHub when you stop using this.
 - A work account belongs to your employer. Whether you may create a token and bring its notifications into a tool on your
   own machine is their decision; an organisation can also require tokens to be approved for single sign-on.

@@ -84,14 +84,13 @@ test('mail is read as a person would: encoded words, quoted-printable, HTML, att
     assert.doesNotThrow(() => { const m = readMail(junk); assert.equal(typeof m.text, 'string'); m.header('subject'); });
 });
 
-test('the login file: only something shaped like an app password is accepted', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-gmail-imap-')), file = path.join(dir, 'login.json'), put = j => fs.writeFileSync(file, JSON.stringify(j));
-  try {
-    assert.match(readLogin(file).problem, /no readable login file/);
-    put({ address: ' Me@Example.invalid ', appPassword: 'abcd efgh ijkl mnop' }); assert.deepEqual(readLogin(file), { address: ME, password: PASSWORD });
-    put({ address: ME, appPassword: 'my-real-Passw0rd!' }); assert.match(readLogin(file).problem, /does not look like a Google app password/); assert.ok(!readLogin(file).problem.includes('Passw0rd'));
-    put({ address: 'not an address', appPassword: PASSWORD }); assert.match(readLogin(file).problem, /not an email address/);
-  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+test('the login comes from what Clockwork hands over, and only something shaped like an app password is accepted', () => {
+  const login = (address, appPassword) => readLogin({ CLOCKWORK_SECRET_ADDRESS: address, CLOCKWORK_SECRET_APP_PASSWORD: appPassword });
+  assert.match(readLogin({}).problem, /no address and app password saved yet/);
+  assert.deepEqual(login(' Me@Example.invalid ', 'abcd efgh ijkl mnop'), { address: ME, password: PASSWORD });
+  assert.match(login(ME, 'my-real-Passw0rd!').problem, /does not look like a Google app password/); assert.ok(!login(ME, 'my-real-Passw0rd!').problem.includes('Passw0rd'));
+  assert.match(login('not an address', PASSWORD).problem, /not an email address/);
+  assert.ok(!/readFileSync\([^)]*login/.test(fs.readFileSync(path.join(HERE, 'main.mjs'), 'utf8')), 'the program has no code that reads a login from disk');
 });
 
 test('first run reads recent mail as history; later runs read only what is new; nothing is ever changed on the server', async () => {

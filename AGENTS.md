@@ -36,8 +36,9 @@ or print anything under `~/.clockwork`: it holds the user's real messages and to
 
 - **Read-only.** Nothing may send, reply, react, post or mark as read on any account.
 - **No real message content** in code, tests, fixtures, logs or commit messages. Make examples up.
-- **Never print a token.** Point at the file that holds it.
-- **Least privilege.** Extractors get the ingest token only. Do not pass other environment to them, and do not widen
+- **Never print a token, and never store an account key in a file.** Keys the user gives go through `cli/secrets.mjs`
+  (the Keychain); an extractor declares them under `secrets` and reads `CLOCKWORK_SECRET_<NAME>`.
+- **Least privilege.** Extractors get the ingest token and their own account keys only. Do not pass other environment to them, and do not widen
   what the agent or ingest token can reach.
 - **Loopback by default.** New listeners bind `127.0.0.1`.
 - **Uncertainty never becomes `ignore`,** and the local model never decides `urgent`.
