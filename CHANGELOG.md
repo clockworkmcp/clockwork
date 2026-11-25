@@ -5,6 +5,17 @@ What changed for someone running Clockwork, newest first. `clockwork version` sh
 
 ## Unreleased
 
+- **Your agent can search everything.** The new `search_items` tool finds past items in any bucket, ignored ones
+  included, by words, sender, group, source and time, and can read one conversation whole. Until now an agent could only
+  list a bucket.
+- **Watch a GitHub repository.** `clockwork connect github-repo` brings in what happens on the repositories you list:
+  issues, pull requests, comments, reviews, stars, forks, pushes and releases. A public repository needs no token.
+  GitHub's activity list can run minutes to hours late: see
+  [extractors/github-repo/README.md](extractors/github-repo/README.md). Tried against one real repository's activity.
+- **An extractor's key can be optional.** `"optional": true` in a manifest's `secrets` is for a key the program runs
+  without; pressing Enter at `clockwork connect` skips it.
+- **Fixed: X capture on your own Mac could stop for good.** When the hidden browser lost its only page, the connector
+  kept reporting "the browser did not answer" until it was restarted by hand. It now opens a new page.
 - **Account keys move out of plain files into your Keychain.** `clockwork connect` now asks for the token or app
   password itself, without showing it, and keeps it in the macOS Keychain. This covers GitHub, GitLab, Linear, Discord,
   Slack and the new Gmail app-password extractor. **If you saved a token file before, run `clockwork connect <name>`

@@ -41,14 +41,14 @@ clockwork connect x           # log in to X in a separate Chrome window
 clockwork status
 ```
 
-`clockwork extractors` lists every source. Thirteen more are built in, each with its own setup page:
+`clockwork extractors` lists every source. Fourteen more are built in, each with its own setup page:
 [Gmail with an app password](../extractors/gmail-imap/README.md), [Outlook mail](../extractors/outlook/README.md), [iMessage and SMS](../extractors/imessage/README.md),
 [calendar invitations](../extractors/calendar/README.md), [Discord](../extractors/discord/README.md),
-[GitHub](../extractors/github/README.md), [GitLab](../extractors/gitlab/README.md),
+[GitHub](../extractors/github/README.md), [GitHub repositories](../extractors/github-repo/README.md), [GitLab](../extractors/gitlab/README.md),
 [Linear](../extractors/linear/README.md), [Jira](../extractors/jira/README.md),
 [Bluesky](../extractors/bluesky/README.md), [Mastodon](../extractors/mastodon/README.md),
 [Hacker News](../extractors/hackernews/README.md) and [RSS / Atom feeds](../extractors/rss/README.md).
-`clockwork connect <name>` tells you what each one needs. These thirteen and Slack have so far only been tested against
+`clockwork connect <name>` tells you what each one needs. These fourteen and Slack have so far only been tested against
 stand-ins for the real service.
 
 ### Gmail

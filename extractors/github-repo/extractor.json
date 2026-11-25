@@ -1,0 +1,30 @@
+{
+  "name": "github-repo",
+  "source": "github",
+  "description": "Everything that happens on the GitHub repositories you list: new issues and pull requests, comments, reviews, stars, forks, pushes and releases. Read-only: it only reads each repository's activity list. A public repository needs no token.",
+  "run": {
+    "command": "node",
+    "args": [
+      "main.mjs"
+    ]
+  },
+  "secrets": [
+    {
+      "name": "token",
+      "prompt": "GitHub token (press Enter if every repository is public)",
+      "optional": true,
+      "pattern": "^(github_pat_|ghp_)[A-Za-z0-9_]+$",
+      "help": "Only a private repository needs this. On GitHub open Settings, Developer settings, Personal access tokens, Fine-grained tokens, choose \"Only select repositories\" and that repository, and set Metadata, Issues, Pull requests and Contents to Read-only. Steps: extractors/github-repo/README.md."
+    }
+  ],
+  "requires": [
+    {
+      "file": "{extractorData}/repos",
+      "help": "Create a plain text file with one repository per line, written as owner/name (for example acme/widgets), and save it there. Details: extractors/github-repo/README.md."
+    }
+  ],
+  "ready": {
+    "file": "{extractorData}/repos"
+  },
+  "restartSeconds": 60
+}

@@ -52,7 +52,8 @@ async function openBrowser(url, { foreground = false } = {}) {
     `--remote-allow-origins=http://localhost:${LOGIN_PORT},http://127.0.0.1:${LOGIN_PORT}`, '--no-first-run', '--no-default-browser-check', '--disable-dev-shm-usage',
     '--password-store=basic', '--window-size=1280,900', '--disable-background-networking', ...EXTRA, 'about:blank'];
   let exited = false, child = null;
-  if (LOCAL_APP && await answering()) { /* one is already open (kept from before, or left by an earlier run): use it */ }
+  let reused = false;
+  if (LOCAL_APP && await answering()) reused = true; // one is already open (kept from before, or left by an earlier run): use it
   else if (LOCAL_APP) {
     // A page behind other windows must keep loading and scrolling, so the browser is told not to pause hidden pages.
     spawn('open', [foreground ? '-n' : '-gjn', '-a', LOCAL_APP,   // -g: do not come to the front; -j: start hidden, so no window appears at all
@@ -65,7 +66,11 @@ async function openBrowser(url, { foreground = false } = {}) {
   let target;
   for (let i = 0; i < 60 && !target; i++) {
     await sleep(500); if (exited) throw new Error('the browser did not start');
-    try { target = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json()).find(t => t.type === 'page'); } catch {}
+    try {
+      target = (await (await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`)).json()).find(t => t.type === 'page');
+      // A kept browser whose only page was closed or crashed still answers but has nothing to attach to: give it a page.
+      if (!target && reused && i % 10 === 2) await fetch(`http://127.0.0.1:${CDP_PORT}/json/new?about:blank`, { method: 'PUT' });
+    } catch {}
   }
   if (!target) { await kill(); throw new Error('the browser did not answer'); }
   const ws = new WebSocket(target.webSocketDebuggerUrl);

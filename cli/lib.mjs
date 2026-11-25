@@ -48,9 +48,9 @@ export function manifestProblems(m) {
   if (m.restartSeconds !== undefined && !(Number(m.restartSeconds) >= 10)) out.push('"restartSeconds" must be at least 10');
   const isRegExp = p => { try { new RegExp(p); return true; } catch { return false; } };
   if (m.secrets !== undefined && !(Array.isArray(m.secrets) && m.secrets.length <= 8 && new Set(m.secrets.map(s => s?.name)).size === m.secrets.length && m.secrets.every(s => s && /^[a-z][a-z0-9-]{0,30}$/.test(s.name || '') && typeof s.prompt === 'string' && s.prompt
-    && (s.help === undefined || typeof s.help === 'string') && (s.hidden === undefined || typeof s.hidden === 'boolean') && (s.pattern === undefined || (typeof s.pattern === 'string' && isRegExp(s.pattern)))
+    && (s.help === undefined || typeof s.help === 'string') && (s.hidden === undefined || typeof s.hidden === 'boolean') && (s.optional === undefined || typeof s.optional === 'boolean') && (s.pattern === undefined || (typeof s.pattern === 'string' && isRegExp(s.pattern)))
     && (s.file === undefined || (typeof s.file === 'string' && /^\{extractorData\}\/[^/]+$/.test(s.file) && !s.file.includes('..'))))))
-    out.push('"secrets" must be a list of { "name": "token", "prompt": "what to ask for" }, optionally with "help", "pattern", "hidden" and "file" (a file directly in {extractorData} that used to hold it)');
+    out.push('"secrets" must be a list of { "name": "token", "prompt": "what to ask for" }, optionally with "help", "pattern", "hidden", "optional" and "file" (a file directly in {extractorData} that used to hold it)');
   return out;
 }
 const fill = (s, vars) => String(s).replace(/\{(data|dir|extractorData)\}/g, (_, k) => vars[k]);

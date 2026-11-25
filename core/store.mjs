@@ -102,6 +102,24 @@ export function openStore(file = path.join(dataDir(), 'clockwork.db')) {
         yours: db.prepare(`SELECT id, direction, kind, source_time, text FROM events WHERE thread_id=? AND source=? AND source_time>? AND direction='outgoing' ORDER BY source_time DESC LIMIT ?`).all(e.thread_id, e.source, e.source_time, own) };
     },
     threadContext: (e, n = 6) => e.thread_id ? q.thread.all(e.thread_id, e.source, e.source_time ?? '9999', n).reverse() : [],
+    /** Everything kept, whatever was decided about it: found by words, sender, chat, source, bucket and time, newest first.
+     *  Every word must appear in the text or the sender's name (any case). `before` (a time) reads on past a full page. */
+    search({ words = [], source, bucket, from, chat, threadId, threadSource, since, before, includeOutgoing = false, limit = 20 } = {}) {
+      const like = w => '%' + String(w).replace(/[\\%_]/g, c => '\\' + c) + '%', when = 'COALESCE(e.source_time, e.observed_at)';
+      const where = ["(d.stage IS NULL OR d.stage!='synthetic')"], args = [];
+      for (const w of words.slice(0, 8)) { where.push("(e.text LIKE ? ESCAPE '\\' OR COALESCE(e.author_name, '') LIKE ? ESCAPE '\\')"); args.push(like(w), like(w)); }
+      if (source) { where.push('e.source=?'); args.push(String(source)); }
+      if (bucket) { where.push('d.bucket=?'); args.push(String(bucket)); }
+      if (from) { where.push("(COALESCE(e.author_name, '') LIKE ? ESCAPE '\\' OR COALESCE(e.author, '') LIKE ? ESCAPE '\\')"); args.push(like(from), like(from)); }
+      if (chat) { where.push("COALESCE(json_extract(e.metadata, '$.chat'), '') LIKE ? ESCAPE '\\'"); args.push(like(chat)); }
+      if (threadId) { where.push('e.thread_id=? AND e.source=?'); args.push(String(threadId), String(threadSource)); }
+      if (!includeOutgoing) where.push("e.direction='incoming'");
+      if (since) { where.push(`${when}>?`); args.push(new Date(since).toISOString()); }
+      if (before) { where.push(`${when}<?`); args.push(new Date(before).toISOString()); }
+      return db.prepare(`SELECT e.id, e.source, e.feed, e.thread_id, e.kind, e.metadata, e.author, e.author_name, ${when} AS source_time, e.is_group, e.direction, e.text, e.url,
+        d.bucket, d.stage, d.reason, d.decided_at, ${ANSWERED} AS answered
+        FROM events e LEFT JOIN decisions d ON d.event_id=e.id WHERE ${where.join(' AND ')} ORDER BY ${when} DESC LIMIT ?`).all(...args, Math.max(1, Math.min(Number(limit) || 20, 100)));
+    },
     /** Items in a bucket whose own time (when they were sent, not when they were classified) is after `since`, newest first. */
     queue({ bucket, since = 0, limit = 50, source }) {
       const sinceIso = new Date(Number(since) || 0).toISOString();

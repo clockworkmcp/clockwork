@@ -81,7 +81,7 @@ test('http: token auth, ingest, feedback, MCP tools', async () => {
     assert.deepEqual(await (await call('/ingest/events', { source: 'whatsapp', events: [ev('m1', { authorName: 'Dana' })] })).json(), { received: 1, new: 1 });
     await call('/triage', {});
     const tools = await (await call('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/list' })).json();
-    assert.deepEqual(tools.result.tools.map(t => t.name), ['get_digest', 'get_urgent_updates', 'get_queue', 'get_event', 'get_source_health', 'get_quality', 'record_feedback', 'get_setup_status']);
+    assert.deepEqual(tools.result.tools.map(t => t.name), ['get_digest', 'get_urgent_updates', 'get_queue', 'search_items', 'get_event', 'get_source_health', 'get_quality', 'record_feedback', 'get_setup_status']);
     const dig = await (await call('/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_digest', arguments: {} } })).json();
     assert.equal(JSON.parse(dig.result.content[0].text).later[0].from, 'Dana');
     const fb = await (await call('/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'record_feedback', arguments: { id: 'whatsapp:t1:m1', bucket: 'urgent', note: 'school pickup' } } })).json();

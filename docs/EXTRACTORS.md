@@ -81,6 +81,7 @@ any model key.
   file only the user can read; on a hosted machine, the host's secret store). The program gets it in
   `CLOCKWORK_SECRET_<NAME>` each time it starts, and is not started until every one is there. **Never ask for a key in
   a `requires` file, and never write one to disk yourself.** `"hidden": false` is for what is not secret (an address);
+  `"optional": true` is for a key the program can run without (a token only a private repository needs): pressing Enter skips it;
   `"file": "{extractorData}/token"` names a file that used to hold the key, which `connect` moves and deletes.
 - `requires`: other files the user must supply before connecting (settings, not keys); `help` is shown if one is missing.
 - `ready`: the extractor is not started until this file exists (typically the saved login).

@@ -41,7 +41,7 @@ export const legacyValue = file => { try { return fs.readFileSync(file, 'utf8').
 /** What an extractor is handed, and what is still missing. A key still in its old file counts as there: the extractor reads that itself. */
 export function secretsFor(extractor, secrets = []) {
   const env = {}, missing = [], inFiles = [];
-  for (const s of secrets) { const v = getSecret(extractor, s.name); if (v) env[extractorVar(s.name)] = v; else if (s.file && legacyValue(s.file)) inFiles.push(s); else missing.push(s.name); }
+  for (const s of secrets) { const v = getSecret(extractor, s.name); if (v) env[extractorVar(s.name)] = v; else if (s.file && legacyValue(s.file)) inFiles.push(s); else if (!s.optional) missing.push(s.name); }
   return { env, missing, inFiles };
 }
 

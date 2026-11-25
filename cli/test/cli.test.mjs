@@ -21,7 +21,7 @@ test('init creates private config and tokens once, and never prints a token', ()
 
 test('built-in extractors are valid, off by default, and the templates are not listed', () => {
   const xs = lib.listExtractors(lib.loadConfig());
-  assert.deepEqual(xs.filter(x => x.builtin).map(x => x.name).sort(), ['bluesky', 'calendar', 'discord', 'github', 'gitlab', 'gmail', 'gmail-imap', 'hackernews', 'imessage', 'jira', 'linear', 'mastodon', 'outlook', 'rss', 'slack', 'whatsapp', 'x']);
+  assert.deepEqual(xs.filter(x => x.builtin).map(x => x.name).sort(), ['bluesky', 'calendar', 'discord', 'github', 'github-repo', 'gitlab', 'gmail', 'gmail-imap', 'hackernews', 'imessage', 'jira', 'linear', 'mastodon', 'outlook', 'rss', 'slack', 'whatsapp', 'x']);
   for (const x of xs) { assert.deepEqual(x.problems, [], x.name); assert.equal(x.enabled, false); }
 });
 
@@ -175,6 +175,10 @@ test('connect asks for a key, keeps it in the Keychain and nowhere in the data f
     assert.deepEqual(Object.values(kc.items()), [KEY]); assert.match(Object.keys(kc.items())[0], /^dev\.clockwork\.keyed\.[0-9a-f]{10}\|token$/, 'an item of its own for this extractor and this data folder');
     assert.ok(!kc.argv().includes(KEY), 'the key never appears on a command line, where other programs could list it'); assert.deepEqual(filesHolding(KEY), [], 'and in no file under the data folder');
     assert.equal(x().enabled, true); assert.deepEqual(handed(), { env: { CLOCKWORK_SECRET_TOKEN: KEY }, missing: [], inFiles: [] });
+    // A key marked optional is handed over when saved and never counts as missing, so the extractor starts without it.
+    Object.assign(process.env, kc.env); try { assert.deepEqual(secrets.secretsFor('keyed', [{ name: 'token', prompt: 'T' }, { name: 'extra', prompt: 'E', optional: true }, { name: 'needed', prompt: 'N' }]).missing, ['needed']); } finally { for (const k of Object.keys(kc.env)) delete process.env[k]; }
+    assert.deepEqual(lib.manifestProblems({ name: 'a', source: 'a', run: { command: 'node' }, secrets: [{ name: 'token', prompt: 'T', optional: true }] }), []);
+    assert.equal(lib.manifestProblems({ name: 'a', source: 'a', run: { command: 'node' }, secrets: [{ name: 'token', prompt: 'T', optional: 'yes' }] }).length, 1);
     assert.ok(!JSON.stringify(lib.resolveExtractor(x(), lib.loadConfig())).includes(KEY), 'a trial run (clockwork check) is built without it');
     assert.match(cwk('', 'connect', 'keyed').stdout, /Feed token: already saved/);
     r = cwk(NEWER + '\n', 'connect', 'keyed', '--replace'); assert.equal(r.status, 0, r.stderr); assert.deepEqual(Object.values(kc.items()), [NEWER]);

@@ -91,7 +91,7 @@ git clone https://github.com/clockworkmcp/clockwork.git && cd clockwork
 ./install.sh                  # dependencies, config and the `clockwork` command; no password, nothing system-wide
 clockwork doctor              # every line should say ok
 clockwork start               # run now and at every login
-clockwork connect whatsapp    # link accounts one at a time; `clockwork extractors` lists all seventeen
+clockwork connect whatsapp    # link accounts one at a time; `clockwork extractors` lists all eighteen
 clockwork agent               # the MCP address, where the agent's token is, and the skill file
 clockwork status              # what is running, what setup still needs, and how far each source's model has got
 clockwork demo                # optional: a throwaway copy with made-up messages, to try with your agent first
@@ -165,7 +165,7 @@ Step-by-step instructions for each: [docs/CONNECT.md](docs/CONNECT.md).
 
 ## Sources
 
-An extractor is a folder with a manifest and a program that posts items to Clockwork. Seventeen are built in, all off
+An extractor is a folder with a manifest and a program that posts items to Clockwork. Eighteen are built in, all off
 until you connect them:
 
 | Source | What it brings in | You provide | Setup |
@@ -180,6 +180,7 @@ until you connect them:
 | Calendar | new and changed invitations | your calendar's private feed address | [extractors/calendar](extractors/calendar/README.md) |
 | Discord | channels in servers your own bot is in | a bot token | [extractors/discord](extractors/discord/README.md) |
 | GitHub | your notifications | a personal access token | [extractors/github](extractors/github/README.md) |
+| GitHub repositories | issues, pull requests, comments, stars, forks and pushes on the repositories you list | nothing for a public repository; a read-only token for a private one | [extractors/github-repo](extractors/github-repo/README.md) |
 | GitLab | your to-do list | a read-only token | [extractors/gitlab](extractors/gitlab/README.md) |
 | Linear | your inbox | a read-only API key | [extractors/linear](extractors/linear/README.md) |
 | Jira | issues you are assigned, reported or watch | an Atlassian API token | [extractors/jira](extractors/jira/README.md) |
@@ -188,7 +189,7 @@ until you connect them:
 | Hacker News | replies to you, and your keywords | your username (no login) | [extractors/hackernews](extractors/hackernews/README.md) |
 | RSS / Atom | blogs, status pages, podcasts, YouTube channels, Reddit inbox feeds | feed addresses | [extractors/rss](extractors/rss/README.md) |
 
-WhatsApp, Gmail and X have run on real accounts. **The other fourteen have only been tested against
+WhatsApp, Gmail and X have run on real accounts. **The other fifteen have only been tested against
 stand-ins for the real service** (the feed reader and Hacker News also against the live, public services). Expect to
 find problems the first time one meets a real account, and please report them.
 

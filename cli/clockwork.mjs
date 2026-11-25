@@ -62,6 +62,7 @@ async function collectSecrets(name, secrets) {
     if ((have || old) && !replace) { console.log(`${s.prompt}: already saved. To enter a new one: clockwork connect ${name} --replace`); continue; }
     if (s.help) console.log(s.help);
     const v = await askValue(`${s.prompt}${s.hidden === false ? '' : ' (not shown as you type or paste)'}: `, s.hidden !== false);
+    if (!v && s.optional) { console.log(`${s.prompt}: none saved. It works without one; to add one later: clockwork connect ${name} --replace`); continue; }
     if (!v) die(`Nothing was entered for "${s.prompt}". Linking asks for a key to your account, so run this yourself in a terminal: clockwork connect ${name}\nDo not give it to an agent or paste it into a chat.`);
     if (s.pattern && !new RegExp(s.pattern).test(v)) die(`That is not shaped like ${/^[aeiou]/i.test(s.prompt) ? 'an' : 'a'} ${s.prompt}, so nothing was saved.`);
     try { setSecret(name, s.name, v); } catch (e) { die(`Could not save it: ${e.message}`); }
