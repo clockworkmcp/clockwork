@@ -14,7 +14,8 @@ an agent *using* a Clockwork install (labelling items, raising urgent ones), you
 - `connectors/` the programs behind the built-in extractors (WhatsApp in Go, Gmail and X in Node). The others
   (Slack, Outlook, GitHub, RSS and so on) keep their program, test and README with the manifest in `extractors/<name>/`,
   which is the layout new extractors should use.
-- `extractors/` one folder per built-in extractor with its `extractor.json`, plus `template/`.
+- `extractors/` one folder per built-in extractor with its `extractor.json`, plus `templates/` (what `clockwork new`
+  copies: `basic`, `api`, `mac-app`).
 - `agent/SKILL.md` instructions for the user's agent; `agent/INSTALL.md` how an agent installs Clockwork; `agent/SOURCES.md`
   how it adds sources and shares extractors it wrote. `docs/` user documentation.
 

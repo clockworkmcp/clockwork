@@ -195,8 +195,8 @@ find problems the first time one meets a real account, and please report them.
 **Write your own** in a few minutes, or have your agent write one:
 
 ```bash
-clockwork new my-feed         # a working extractor from a 50-line template
-clockwork check my-feed       # checks the manifest and does one trial run
+clockwork new my-feed api     # a working extractor from a template: api, mac-app or basic
+clockwork check my-feed       # the manifest, one trial run, then offline over sample input, whole and damaged
 clockwork enable my-feed
 ```
 

@@ -1,0 +1,7 @@
+{
+  "items": [
+    { "id": "n-101", "thread": "t-4", "from": { "handle": "billing", "name": "Example Billing" }, "text": "Your invoice for January is ready.", "created_at": "2026-01-04T16:15:00Z", "url": "https://app.example.invalid/t-4#n-101" },
+    { "id": "n-100", "thread": "t-4", "from": { "handle": "billing", "name": "Example Billing" }, "text": "", "attachment": "image", "created_at": "2026-01-04T16:14:00Z" }
+  ],
+  "next": null
+}

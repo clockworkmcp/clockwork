@@ -21,8 +21,9 @@ const HELP = `clockwork: personal feed triage that runs on your own machine
   clockwork enable|disable <name>
   clockwork add <folder|git-url> add an extractor someone else wrote (shows what it will run and asks first)
   clockwork update <name> [ref]  fetch a newer version of an added extractor (asks first; never happens by itself)
-  clockwork new <name>           start your own extractor from the template
-  clockwork check <name|folder>  validate an extractor and give it one trial run that touches none of your items
+  clockwork new <name> [kind]    start your own extractor from a template (kinds: basic, api, mac-app)
+  clockwork check <name|folder>  validate an extractor, give it one trial run that touches none of your items,
+                                 and run it offline over the sample input in its fixtures/ folder
   clockwork remove <name>        delete an added extractor
 
   clockwork agent                how to connect your agent, and where its instructions are
@@ -70,6 +71,62 @@ function place(got, m, src) {
   writePrivate(path.join(dest, '.added.json'), JSON.stringify({ from: src.split('#')[0], commit: got.commit, at: new Date().toISOString() }));
 }
 const addedInfo = x => { try { return JSON.parse(fs.readFileSync(path.join(x.dir, '.added.json'), 'utf8')); } catch { return null; } };
+
+// ---- check: a stand-in for the core, and runs of an extractor against it --------------------------------------------
+/** Records what one run of an extractor sends and holds every item against the contract. Nothing reaches the real core. */
+async function standIn(m) {
+  const http = await import('node:http'), crypto = await import('node:crypto'), token = crypto.randomBytes(16).toString('hex');
+  const seen = { posts: 0, items: 0, at: 0, other: new Set(), status: new Set(), bad: new Set(), notes: new Set() };
+  const server = http.createServer((req, res) => { let body = ''; req.on('data', d => { body += d; if (body.length > 9e6) req.destroy(); }); req.on('end', () => {
+    if (req.method !== 'POST' || req.url !== '/ingest/events') { seen.other.add(`${req.method} ${req.url}`); res.writeHead(403); return res.end('{}'); }
+    if (req.headers.authorization !== 'Bearer ' + token) seen.bad.add('a request came without the token from CLOCKWORK_INGEST_TOKEN');
+    let j = null; try { j = JSON.parse(body); } catch { seen.bad.add('a request body was not JSON'); }
+    if (j) { seen.posts++; seen.at = Date.now(); if (j.source !== m.source) seen.bad.add(`"source" was ${JSON.stringify(j.source)}; the manifest says "${m.source}"`);
+      if (!Array.isArray(j.events)) seen.bad.add('"events" was not a list'); else for (const e of j.events) { seen.items++;
+        if (typeof e?.sourceId !== 'string' || !e.sourceId) seen.bad.add('an item has no "sourceId"');
+        if (e?.direction !== undefined && !['incoming', 'outgoing'].includes(e.direction)) seen.bad.add(`"direction" was ${JSON.stringify(e.direction)}`);
+        if (e?.sourceTime !== undefined && Number.isNaN(Date.parse(e.sourceTime))) seen.bad.add(`"sourceTime" ${JSON.stringify(e.sourceTime)} is not a date`);
+        if (e?.text !== undefined && typeof e.text !== 'string') seen.bad.add('"text" was not a string');
+        if (e?.sourceTime === undefined) seen.notes.add('items have no "sourceTime": queues are ordered by it'); }
+      if (typeof j.status === 'string') seen.status.add(j.status); }
+    res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ received: j?.events?.length || 0, new: j?.events?.length || 0 })); }); });
+  await new Promise(ok => server.listen(0, '127.0.0.1', ok));
+  return { seen, token, url: `http://127.0.0.1:${server.address().port}`, close() { server.close(); server.closeAllConnections?.(); } };
+}
+/** Run the program against a stand-in with a throwaway data folder, until `done(seen, ms)` says so, it stops, or time is up. */
+async function trial(m, r, { seconds, env = {}, done }) {
+  const core = await standIn(m), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-check-')), start = Date.now();
+  const child = spawn(r.run.command, r.run.args, { cwd: r.cwd, detached: true, stdio: 'ignore', env: { ...r.env, ...env, CLOCKWORK_CORE_URL: core.url, CLOCKWORK_INGEST_TOKEN: core.token, CLOCKWORK_EXTRACTOR_DATA: tmp } });
+  let failed = null, exited = false; child.on('error', e => { failed = e.message; }); child.on('exit', () => { exited = true; });
+  while (Date.now() < start + seconds * 1000 && !failed && !exited && !done(core.seen, Date.now() - start)) await new Promise(ok => setTimeout(ok, 100));
+  try { process.kill(-child.pid, 'SIGTERM'); } catch {} core.close(); fs.rmSync(tmp, { recursive: true, force: true });
+  return { ...core.seen, failed };
+}
+/** The sample input an extractor ships in its `fixtures/` folder: plain files, made up, small. */
+const fixtureFiles = dir => { try { return fs.readdirSync(dir).filter(f => !f.startsWith('.') && fs.statSync(path.join(dir, f)).isFile()).sort(); } catch { return []; } };
+/** Two ways a file from outside goes wrong: it stops half way, or it is not what its name says. */
+const SPOIL = { 'cut short': b => b.subarray(0, Math.floor(b.length / 2)), 'unreadable': () => Buffer.from([0, 255, 254, 0, 123, 34, 60, 0, 255, 10, 13, 0]) };
+/**
+ * Run the program offline over its fixtures: once as they are, then once for each file in each damaged form.
+ * `CLOCKWORK_FIXTURES` names a copy of the folder; with it set the program reads that instead of its real source.
+ */
+async function fixtureRuns(m, r, dir, files, say) {
+  const quiet = s => s.posts && Date.now() - s.at > 700;        // it reported in, and has had a moment to send what else it has
+  const run = async spoil => { const copy = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-fixtures-')); fs.cpSync(dir, copy, { recursive: true });
+    if (spoil) fs.writeFileSync(path.join(copy, spoil.file), SPOIL[spoil.how](fs.readFileSync(path.join(dir, spoil.file))));
+    try { return await trial(m, r, { seconds: 15, env: { CLOCKWORK_FIXTURES: copy }, done: (s, ms) => quiet(s) && (s.items > 0 || !!spoil || ms > 5000) }); } finally { fs.rmSync(copy, { recursive: true, force: true }); } };
+  const whole = await run(null);
+  say(!whole.failed && whole.items > 0 && !whole.bad.size, whole.failed ? `fixtures: could not start: ${whole.failed}` : !whole.items ? 'fixtures: no item came out of the sample input (with CLOCKWORK_FIXTURES set, the program must read that folder instead of its real source)'
+    : whole.bad.size ? `fixtures: the sample input gave something the core would refuse: ${[...whole.bad].join('; ')}` : `fixtures: ${files.length} file(s) of sample input read offline, ${whole.items} item(s), all well formed`);
+  if (whole.failed || !whole.items) return;
+  const broke = [];
+  for (const file of files.slice(0, 12)) for (const how of Object.keys(SPOIL)) { const res = await run({ file, how });
+    if (!res.posts) broke.push(`fixtures: with ${file} ${how} it stopped without a word. It must still report in (an empty list with status "error") and carry on`);
+    else if (res.bad.size) broke.push(`fixtures: with ${file} ${how} it sent something the core would refuse: ${[...res.bad].join('; ')}`); }
+  if (broke.length) for (const b of broke) say(false, b); else say(true, `fixtures: still reports in, and sends nothing malformed, with each file cut short or unreadable`);
+}
+/** The starting points `clockwork new` offers, by how the source is reached. */
+const KINDS = { basic: 'the smallest working extractor; start here when nothing below fits', api: 'a service read through its API, with a key the user saves in a file', 'mac-app': 'another app\'s own store on this Mac (a SQLite file), opened read-only' };
 
 const commands = {
   async init() {
@@ -202,51 +259,37 @@ const commands = {
       console.log(`Updated.${c.extractors[name]?.enabled && supervisorAlive() ? ` It is still running the old version: clockwork disable ${name}, wait ten seconds, then clockwork connect ${name}.` : ''}`);
     } finally { if (got.tmp) fs.rmSync(got.tmp, { recursive: true, force: true }); }
   },
-  /** Validate an extractor and run it once against a stand-in for the core, so nothing reaches the real database. */
+  /** Validate an extractor, run it once against a stand-in for the core, then run it offline over its sample input. Nothing reaches the real database. */
   async check(target) {
     const c = need(); if (!target) die('Which extractor? Give a name or a folder. For example: clockwork check my-feed');
     let x = findExtractor(target, c);
     if (!x) { const dir = path.resolve(target); let m = null; try { m = JSON.parse(fs.readFileSync(path.join(dir, 'extractor.json'), 'utf8')); } catch { die(`No extractor named "${target}" and no readable extractor.json in ${dir}`); }
       const problems = manifestProblems(m); if (m.cwd !== undefined) problems.push('"cwd" is only for built-in extractors'); x = { name: m.name || 'unnamed', dir, builtin: false, manifest: m, problems }; }
-    const bad = [], note = [], say = (ok, what) => { console.log(`  ${ok ? 'ok  ' : 'FIX '} ${what}`); if (!ok) bad.push(what); };
+    const bad = [], say = (ok, what) => { console.log(`  ${ok ? 'ok  ' : 'FIX '} ${what}`); if (!ok) bad.push(what); };
     say(!x.problems.length, x.problems.length ? `manifest: ${x.problems.join('; ')}` : 'manifest is valid'); if (x.problems.length) { process.exitCode = 1; return; }
     const r = resolveExtractor(x, c), m = x.manifest, seconds = Math.min(120, Math.max(5, Number(process.argv.find(a => a.startsWith('--seconds='))?.split('=')[1]) || 20));
     const exe = path.isAbsolute(r.run.command) || r.run.command.startsWith('.') ? fs.existsSync(path.resolve(r.cwd, r.run.command)) : spawnSync('which', [r.run.command], { stdio: 'ignore' }).status === 0;
     say(exe, `program "${r.run.command}" ${exe ? 'is present' : `is missing${m.build || m.install ? ' (run its install and build steps first: clockwork connect ' + x.name + ')' : ''}`}`); if (!exe) { process.exitCode = 1; return; }
-    const http = await import('node:http'), crypto = await import('node:crypto'), token = crypto.randomBytes(16).toString('hex'), tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-check-'));
-    const seen = { posts: 0, items: 0, other: new Set(), status: new Set() }, itemBad = new Set();
-    const server = http.createServer((req, res) => { let body = ''; req.on('data', d => { body += d; if (body.length > 9e6) req.destroy(); }); req.on('end', () => {
-      if (req.method !== 'POST' || req.url !== '/ingest/events') { seen.other.add(`${req.method} ${req.url}`); res.writeHead(403); return res.end('{}'); }
-      if (req.headers.authorization !== 'Bearer ' + token) itemBad.add('a request came without the token from CLOCKWORK_INGEST_TOKEN');
-      let j = null; try { j = JSON.parse(body); } catch { itemBad.add('a request body was not JSON'); }
-      if (j) { seen.posts++; if (j.source !== m.source) itemBad.add(`"source" was ${JSON.stringify(j.source)}; the manifest says "${m.source}"`);
-        if (!Array.isArray(j.events)) itemBad.add('"events" was not a list'); else for (const e of j.events) { seen.items++;
-          if (typeof e?.sourceId !== 'string' || !e.sourceId) itemBad.add('an item has no "sourceId"');
-          if (e?.direction !== undefined && !['incoming', 'outgoing'].includes(e.direction)) itemBad.add(`"direction" was ${JSON.stringify(e.direction)}`);
-          if (e?.sourceTime !== undefined && Number.isNaN(Date.parse(e.sourceTime))) itemBad.add(`"sourceTime" ${JSON.stringify(e.sourceTime)} is not a date`);
-          if (e?.text !== undefined && typeof e.text !== 'string') itemBad.add('"text" was not a string');
-          if (e?.sourceTime === undefined) note.push('items have no "sourceTime": queues are ordered by it'); }
-        if (typeof j.status === 'string') seen.status.add(j.status); }
-      res.writeHead(200, { 'content-type': 'application/json' }); res.end(JSON.stringify({ received: j?.events?.length || 0, new: j?.events?.length || 0 })); }); });
-    await new Promise(ok => server.listen(0, '127.0.0.1', ok));
     console.log(`  running it for up to ${seconds} s against a stand-in for the core (nothing reaches your real items)`);
-    const child = spawn(r.run.command, r.run.args, { cwd: r.cwd, detached: true, stdio: 'ignore', env: { ...r.env, CLOCKWORK_CORE_URL: `http://127.0.0.1:${server.address().port}`, CLOCKWORK_INGEST_TOKEN: token, CLOCKWORK_EXTRACTOR_DATA: tmp } });
-    let failed = null; child.on('error', e => { failed = e.message; });
-    const end = Date.now() + seconds * 1000; while (Date.now() < end && !failed && !(seen.posts && (seen.items || Date.now() > end - (seconds - 5) * 1000))) await new Promise(ok => setTimeout(ok, 200));
-    try { process.kill(-child.pid, 'SIGTERM'); } catch {} server.close(); server.closeAllConnections?.(); fs.rmSync(tmp, { recursive: true, force: true });
-    say(!failed, failed ? `could not start: ${failed}` : 'program starts');
+    const seen = await trial(m, r, { seconds, done: (s, ms) => s.posts && (s.items || ms > 5000) });
+    say(!seen.failed, seen.failed ? `could not start: ${seen.failed}` : 'program starts');
     say(seen.posts > 0, seen.posts ? `reported in ${seen.posts} time(s), ${seen.items} item(s)${seen.status.size ? `, status "${[...seen.status].join('", "')}"` : ''}` : `sent nothing to /ingest/events within ${seconds} s (it must report in at start, even with nothing new)`);
-    for (const p of itemBad) say(false, p);
+    for (const p of seen.bad) say(false, p);
     if (seen.other.size) say(false, `asked the core for something an extractor cannot have: ${[...seen.other].slice(0, 3).join(', ')}`);
-    for (const n of new Set(note)) console.log(`  note ${n}`);
+    for (const n of seen.notes) console.log(`  note ${n}`);
+    const fixtures = path.join(r.cwd, 'fixtures'), files = fixtureFiles(fixtures);
+    if (files.length && !seen.failed) await fixtureRuns(m, r, fixtures, files, say);
+    else if (!files.length) console.log('  note no sample input in a fixtures/ folder, so its reading code was not tried offline (docs/EXTRACTORS.md, "Fixtures")');
     console.log(bad.length ? `\n${bad.length} thing(s) to fix.` : '\nThis extractor follows the contract. The check cannot tell what else the program does: read the code of anything you did not write.'); process.exitCode = bad.length ? 1 : 0;
   },
-  async new(name) {
+  async new(name, kind = 'basic') {
     const c = need(); if (!NAME.test(name || '')) die('Give it a short lower-case name. For example: clockwork new my-feed');
+    const from = path.join(ROOT, 'extractors', 'templates', kind);
+    if (!Object.hasOwn(KINDS, kind) || !fs.existsSync(from)) die(`There is no "${kind}" template. Choose by how the source is reached:\n${Object.entries(KINDS).map(([k, v]) => `  clockwork new ${name} ${k}`.padEnd(36) + v).join('\n')}`);
     if (listExtractors(c).some(x => x.name === name)) die(`There is already an extractor named "${name}".`);
-    const dest = path.join(paths.userExtractors(), name); fs.mkdirSync(paths.userExtractors(), { recursive: true, mode: 0o700 }); fs.cpSync(path.join(ROOT, 'extractors', 'template'), dest, { recursive: true });
+    const dest = path.join(paths.userExtractors(), name); fs.mkdirSync(paths.userExtractors(), { recursive: true, mode: 0o700 }); fs.cpSync(from, dest, { recursive: true });
     const f = path.join(dest, 'extractor.json'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replaceAll('my-source', name));
-    console.log(`Created ${dest}\nEdit main.mjs (the contract is in docs/EXTRACTORS.md), try it with: node main.mjs --once\nThen switch it on: clockwork enable ${name}`);
+    console.log(`Created ${dest} from the "${kind}" template (${KINDS[kind]}).\nEdit main.mjs where it says "Replace" (the contract is in docs/EXTRACTORS.md), and put made-up sample input in fixtures/.\nTry it offline, whole and with damaged input: clockwork check ${name}\nThen switch it on: clockwork ${kind === 'basic' ? 'enable' : 'connect'} ${name}`);
   },
   async remove(name) {
     const c = need(), x = findExtractor(name, c) || die(`No extractor named "${name}".`); if (x.builtin) die(`"${name}" is built in. Switch it off instead: clockwork disable ${name}`);

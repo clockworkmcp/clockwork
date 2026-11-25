@@ -1,0 +1,9 @@
+{
+  "name": "my-source",
+  "source": "my-source",
+  "description": "What this brings in, in one sentence, read from the app's own files on this Mac. Read-only: the store is opened for reading and nothing is ever written to it. macOS only.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "ready": { "file": "{extractorData}/enabled" },
+  "connect": { "type": "flag", "file": "{extractorData}/enabled", "note": "Say what this copies into Clockwork, and which permission macOS will ask for. Reading another app's files usually needs Full Disk Access for the program that runs Clockwork (System Settings > Privacy & Security > Full Disk Access). That is a broad permission and only the user can grant it." },
+  "restartSeconds": 60
+}

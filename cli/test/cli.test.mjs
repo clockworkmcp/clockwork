@@ -19,7 +19,7 @@ test('init creates private config and tokens once, and never prints a token', ()
   assert.ok(!cw('agent').stdout.includes(c.tokens.agent), '`clockwork agent` points at the token file instead of printing it');
 });
 
-test('built-in extractors are valid, off by default, and the template is not listed', () => {
+test('built-in extractors are valid, off by default, and the templates are not listed', () => {
   const xs = lib.listExtractors(lib.loadConfig());
   assert.deepEqual(xs.filter(x => x.builtin).map(x => x.name).sort(), ['bluesky', 'calendar', 'discord', 'github', 'gitlab', 'gmail', 'gmail-imap', 'hackernews', 'imessage', 'jira', 'linear', 'mastodon', 'outlook', 'rss', 'slack', 'whatsapp', 'x']);
   for (const x of xs) { assert.deepEqual(x.problems, [], x.name); assert.equal(x.enabled, false); }
@@ -83,10 +83,42 @@ test('check: the template passes a trial run that touches no real items; a wrong
   assert.equal(cw('remove', 'trial', '--yes').status, 0);
 });
 
+test('new offers a template for each way of reaching a source, and each one passes its check as copied', () => {
+  const none = cw('new', 'nope', 'carrier-pigeon'); assert.notEqual(none.status, 0); for (const k of ['basic', 'api', 'mac-app']) assert.match(none.stderr, new RegExp(`clockwork new nope ${k} `));
+  assert.ok(!fs.existsSync(path.join(lib.paths.userExtractors(), 'nope')));
+  for (const kind of ['api', 'mac-app']) {
+    const name = 'kind-' + kind, made = cw('new', name, kind); assert.equal(made.status, 0, made.stderr); assert.match(made.stdout, new RegExp(`"${kind}" template`));
+    const x = lib.findExtractor(name, lib.loadConfig()); assert.deepEqual(x.problems, []); assert.equal(x.manifest.source, name); assert.ok(x.manifest.ready, 'not started until the user has done their part');
+    const r = cw('check', name, '--seconds=6'); assert.equal(r.status, 0, r.stdout + r.stderr);
+    assert.match(r.stdout, /status "needs_login"/, 'with no key and no store it says so; it does not stop'); assert.match(r.stdout, /fixtures: \d file\(s\) of sample input read offline, 4 item\(s\), all well formed/);
+    assert.match(r.stdout, /still reports in, and sends nothing malformed, with each file cut short or unreadable/);
+    assert.equal(cw('remove', name, '--yes').status, 0);
+  }
+});
+
+test('check runs an extractor offline over its fixtures, whole and damaged, and catches one that stops or sends rubbish', () => {
+  assert.equal(cw('new', 'offline').status, 0);
+  const dir = path.join(lib.paths.userExtractors(), 'offline'), main = path.join(dir, 'main.mjs'), original = fs.readFileSync(main, 'utf8'), fixture = path.join(dir, 'fixtures', 'things.json'), sample = fs.readFileSync(fixture, 'utf8');
+  const ok = cw('check', 'offline', '--seconds=6'); assert.equal(ok.status, 0, ok.stdout + ok.stderr); assert.match(ok.stdout, /fixtures: 1 file\(s\) of sample input read offline, 2 item\(s\)/);
+  assert.equal(fs.readFileSync(fixture, 'utf8'), sample, 'the damaged copies are made elsewhere; the extractor\'s own fixtures are untouched');
+  // One that gives up on input it cannot read: the supervisor would restart it for ever and the user would never be told why.
+  fs.writeFileSync(main, original.replace("await send([], 'error').catch(() => {});", 'process.exit(1);'));
+  const quits = cw('check', 'offline', '--seconds=6'); assert.equal(quits.status, 1); assert.match(quits.stdout, /with things\.json cut short it stopped without a word/); assert.match(quits.stdout, /with things\.json unreadable it stopped without a word/);
+  // One that passes on whatever it is handed without looking.
+  fs.writeFileSync(main, original.replace('sourceId: String(t.id),', 'sourceId: t.id,').replace('if (!t?.id) return null;', '')); fs.writeFileSync(fixture, JSON.stringify([{ id: 7, at: 'yesterday-ish', text: 'made up' }]));
+  const sloppy = cw('check', 'offline', '--seconds=6'); assert.equal(sloppy.status, 1); assert.match(sloppy.stdout, /the sample input gave something the core would refuse: .*no "sourceId".*is not a date/);
+  // One that ignores CLOCKWORK_FIXTURES would be reading the real source during a check.
+  fs.writeFileSync(main, original.replace("process.env.CLOCKWORK_FIXTURES || ''", "''").replace("[{ id: 'hello-1'", '[] || [{')); fs.writeFileSync(fixture, sample);
+  const deaf = cw('check', 'offline', '--seconds=6'); assert.equal(deaf.status, 1); assert.match(deaf.stdout, /no item came out of the sample input/);
+  fs.rmSync(path.join(dir, 'fixtures'), { recursive: true }); fs.writeFileSync(main, original);
+  const bare = cw('check', 'offline', '--seconds=6'); assert.equal(bare.status, 0, 'fixtures are encouraged, not required'); assert.match(bare.stdout, /note no sample input in a fixtures\/ folder/);
+  assert.equal(cw('remove', 'offline', '--yes').status, 0);
+});
+
 test('add from a git address pins the exact version; update asks, and only moves when the user says so', () => {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'clockwork-repo-')), git = (...a) => { const r = spawnSync('git', ['-C', repo, '-c', 'user.name=t', '-c', 'user.email=t@example.invalid', ...a], { encoding: 'utf8' }); assert.equal(r.status, 0, r.stderr); return r.stdout.trim(); };
   try {
-    fs.cpSync(path.join(lib.ROOT, 'extractors', 'template'), repo, { recursive: true });
+    fs.cpSync(path.join(lib.ROOT, 'extractors', 'templates', 'basic'), repo, { recursive: true });
     fs.writeFileSync(path.join(repo, 'extractor.json'), fs.readFileSync(path.join(repo, 'extractor.json'), 'utf8').replaceAll('my-source', 'pinned'));
     git('init', '-q'); git('add', '.'); git('commit', '-q', '-m', 'one'); const first = git('rev-parse', 'HEAD'), url = 'file://' + repo;
     assert.notEqual(cw('add', url).status, 0, 'no consent, no install'); assert.ok(!fs.existsSync(path.join(lib.paths.userExtractors(), 'pinned')));

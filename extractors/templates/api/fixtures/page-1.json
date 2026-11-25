@@ -1,0 +1,7 @@
+{
+  "items": [
+    { "id": "n-103", "thread": "t-7", "from": { "handle": "sam.okafor", "name": "Sam Okafor" }, "text": "Can you look at the quote before 3pm? The client is waiting.", "created_at": "2026-01-05T10:02:00Z", "url": "https://app.example.invalid/t-7#n-103" },
+    { "id": "n-102", "thread": "t-7", "from": { "handle": "you", "name": "You" }, "mine": true, "text": "I will send the numbers tonight.", "created_at": "2026-01-05T09:40:00Z", "url": "https://app.example.invalid/t-7#n-102" }
+  ],
+  "next": "2"
+}

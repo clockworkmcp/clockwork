@@ -5,6 +5,7 @@ import fs from 'node:fs'; import path from 'node:path';
 const CORE = process.env.CLOCKWORK_CORE_URL || 'http://127.0.0.1:4600';
 const TOKEN = process.env.CLOCKWORK_INGEST_TOKEN || '';
 const DATA = process.env.CLOCKWORK_EXTRACTOR_DATA || '.';       // a private folder for this extractor's own state
+const FIXTURES = process.env.CLOCKWORK_FIXTURES || '';          // set by `clockwork check`: read the sample input in this folder, not the real source
 const SOURCE = JSON.parse(fs.readFileSync(new URL('./extractor.json', import.meta.url), 'utf8')).source;
 const ONCE = process.argv.includes('--once');
 
@@ -15,34 +16,40 @@ async function send(events, status = 'ok') {
   return r.json();                                               // { received, new }: items already sent before are not counted as new
 }
 
-/** Replace this: return the items that are new since `state`, and the state to remember for next time. */
-async function fetchNew(state) {
-  const now = new Date().toISOString();
-  const items = state.sentHello ? [] : [{
-    sourceId: 'hello-1',                       // required: stable id of the item at its origin. The same id is never stored twice.
+/** Replace this: what is new at the source since `state`, as the source gives it, and the state to remember for next time. */
+async function readSource(state) {
+  if (FIXTURES) return { things: JSON.parse(fs.readFileSync(path.join(FIXTURES, 'things.json'), 'utf8')), state };   // keep a line like this: it is how your reading code is tried offline
+  const things = state.sentHello ? [] : [{ id: 'hello-1', from: 'template@example.invalid', name: 'Template extractor', at: new Date().toISOString(), text: 'Hello from your new extractor.' }];
+  return { things, state: { ...state, sentHello: true } };
+}
+
+/** Replace this: one thing from the source as a Clockwork item, or null for what should not be brought in. */
+function toItem(t) {
+  if (!t?.id) return null;
+  return {
+    sourceId: String(t.id),                    // required: stable id of the item at its origin. The same id is never stored twice.
     threadId: 'welcome',                       // the conversation it belongs to; items in one thread are shown to the model together
-    author: 'template@example.invalid',        // a stable sender id
-    authorName: 'Template extractor',          // how the sender is shown
-    sourceTime: now,                           // when it was sent, ISO 8601
+    author: t.from,                            // a stable sender id
+    authorName: t.name,                        // how the sender is shown
+    sourceTime: t.at,                          // when it was sent, ISO 8601
     direction: 'incoming',                     // 'outgoing' for things the user wrote themself: never triaged, but used as context
     isGroup: false,
     kind: 'text',                              // 'image', 'video', 'audio', 'document' when there is content Clockwork cannot read
-    text: 'Hello from your new extractor.',
+    text: String(t.text ?? ''),
     url: undefined,                            // where to open the item, if it has an address
     chatName: undefined,                       // the name of the group or channel, if any
-  }];
-  return { items, state: { ...state, sentHello: true } };
+  };
 }
 
 const stateFile = path.join(DATA, 'state.json');
 const load = () => { try { return JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch { return {}; } };
 for (;;) {
   try {
-    const { items, state } = await fetchNew(load());
+    const { things, state } = await readSource(load()), items = things.map(toItem).filter(Boolean);
     const res = await send(items);             // an empty list is a heartbeat: "running, nothing new"
     fs.mkdirSync(DATA, { recursive: true }); fs.writeFileSync(stateFile, JSON.stringify(state));   // only after the core has the items
     if (items.length) console.log(`sent ${items.length}, ${res.new} new`);
-  } catch (e) { console.error('failed:', e.message); await send([], 'error').catch(() => {}); }
+  } catch (e) { console.error('failed:', e.message); await send([], 'error').catch(() => {}); }   // say so, and try again next time: never stop without a word
   if (ONCE) break;
   await new Promise(r => setTimeout(r, 60_000));
 }

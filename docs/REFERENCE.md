@@ -15,7 +15,7 @@ Corrections sent through `record_feedback` outrank teacher labels at the next re
 
 ## Layout
 
-- `cli/` the `clockwork` command and the local supervisor (`clockwork run`). `extractors/` manifests for the built-in extractors and the template.
+- `cli/` the `clockwork` command and the local supervisor (`clockwork run`). `extractors/` manifests for the built-in extractors and the templates.
 
 - `core/` Node service: SQLite store, ingest, cascade, HTTP + MCP (`POST /mcp`). `npm test` runs the tests.
 - `student/` Python scorer (`serve.py`) and trainer (`train.py`, promotes a new head only if it does not regress).

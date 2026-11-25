@@ -56,7 +56,7 @@ export function listExtractors(config = loadConfig() || DEFAULTS) {
     if (!fs.existsSync(base)) continue;
     for (const d of fs.readdirSync(base).sort()) {
       const dir = path.join(base, d), file = path.join(dir, 'extractor.json');
-      if (!fs.existsSync(file) || (builtin && d === 'template')) continue;
+      if (!fs.existsSync(file)) continue;                    // `templates/` holds starting points, not extractors
       const m = readJson(file, null), problems = manifestProblems(m);
       if (!builtin && m && m.name !== d) problems.push(`folder is "${d}" but the manifest is named "${m.name}"`);
       if (!builtin && out.some(x => x.builtin && x.name === m?.name)) problems.push('that name belongs to a built-in extractor');

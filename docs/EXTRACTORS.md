@@ -49,6 +49,7 @@ Size limit: 8 MB per request. Send large backlogs in batches of a few hundred.
 | `CLOCKWORK_CORE_URL` | Address of the core. |
 | `CLOCKWORK_INGEST_TOKEN` | A token that can only write items. It cannot read anything back. |
 | `CLOCKWORK_EXTRACTOR_DATA` | A private folder for the extractor's own state and credentials. |
+| `CLOCKWORK_FIXTURES` | Only during `clockwork check`: a folder of sample input to read instead of the real source. See [Fixtures](#fixtures). |
 
 Plus `PATH`, `HOME` and locale, and whatever the manifest's `env` adds. It does not get the admin token, the agent token or
 any model key.
@@ -82,16 +83,47 @@ any model key.
 ## Writing one
 
 ```bash
-clockwork new my-source          # copies the template into ~/.clockwork/v2/extractors/my-source
+clockwork new my-source api      # copies a template into ~/.clockwork/v2/extractors/my-source
 cd ~/.clockwork/v2/extractors/my-source
-$EDITOR main.mjs                 # replace fetchNew()
-clockwork check my-source        # validates the manifest and gives it one trial run; touches none of your items
-clockwork enable my-source
+$EDITOR main.mjs                 # change what is marked "Replace"
+$EDITOR fixtures/*               # made-up sample input, shaped like what the real source gives
+clockwork check my-source        # validates the manifest, gives it one trial run, then runs it offline over the fixtures
+clockwork connect my-source      # or `enable`, when there is no account to link
 clockwork status
 ```
 
-The template is about fifty lines of Node with no dependencies. An agent can write an extractor for you from it and this page. Its own
+Pick the template by how the source is reached:
+
+| Kind | When | What it already does |
+|---|---|---|
+| `basic` (the default) | nothing below fits | reports in, keeps state, about fifty lines |
+| `api` | the service has an API you call with a key or token the user saves in a file | sends the key to one host only, paces its requests, waits when the service says to, reports `needs_login` when the key stops working, reads newest-first pages back to what it has |
+| `mac-app` | the source is another app's own store on this Mac, a SQLite file | opens the store read-only, reports `needs_login` until macOS allows it, names the table or column an app update took away, reads rows newer than the last one |
+
+Each is plain Node with no dependencies. An agent can write an extractor for you from one of them and this page. Its own
 instructions for that, and for sharing the result, are in [agent/SOURCES.md](../agent/SOURCES.md).
+
+## Fixtures
+
+An extractor meets its real source for the first time on someone's account. Fixtures let its reading code be tried
+before that, with no account and no network.
+
+Put small, **made-up** samples of what the source gives in a `fixtures/` folder next to `extractor.json`: an API's JSON
+answers, the SQL that builds a tiny copy of an app's store, a few mail files. Never copy real messages, names or ids
+into them. When `CLOCKWORK_FIXTURES` is set, the program must read that folder **instead of** its real source and
+contact nothing but the core. The templates show the one line this takes.
+
+`clockwork check` then runs the program offline, several times:
+
+1. **Whole.** At least one item must come out, and every item must be one the core would accept.
+2. **Damaged.** Once for each file cut off half way, and once for each file replaced by bytes that are not what its name
+   says. Real sources do both: a download stops, a store is copied mid-write, an API answers with an error page. The
+   program must still report in (an empty list with status `error` is the right answer) and must not send a malformed
+   item. One that stops without a word fails the check: the service would restart it for ever and nobody would be told
+   why.
+
+Each run gets a copy of the folder, a throwaway data folder and a stand-in for the core, so your fixtures, your state
+and your items are untouched. Fixtures are optional; without them the check says the reading code was not tried.
 
 ## Adding someone else's
 

@@ -45,12 +45,14 @@ It never updates by itself. `clockwork update <name>` fetches a newer version an
 ## C. Writing one
 
 ```bash
-clockwork new <name>        # a working template in ~/.clockwork/v2/extractors/<name>/
-clockwork check <name>      # trial run against a stand-in; touches none of the user's items
+clockwork new <name> <kind> # a working template in ~/.clockwork/v2/extractors/<name>/
+clockwork check <name>      # trial run against a stand-in, then offline over the sample input; touches none of the user's items
 clockwork enable <name>
 ```
 
-1. Read `docs/EXTRACTORS.md` (the contract) and the template's `main.mjs`. Replace `fetchNew()`.
+1. Read `docs/EXTRACTORS.md` (the contract). Pick the template by how the source is reached: `api` for a service with
+   an API and a key the user saves, `mac-app` for another app's own store on this Mac, `basic` otherwise. Change what
+   its `main.mjs` marks "Replace".
 2. Prefer the service's official API with the narrowest read-only permission it offers. If the only way is an unofficial
    one, tell the user that and the risk to their account before writing it.
 3. Keep it small and dependency-free where you can. Keep credentials and state in the extractor's own data folder
@@ -60,7 +62,10 @@ clockwork enable <name>
    with `origin: "history"`.
 6. If it needs a credential, declare the file in `extractor.json` under `requires` with a `help` line, so
    `clockwork connect` tells the user where to save it.
-7. Run `clockwork check <name>` until it passes. **Show the user what you wrote** and what it reads before you switch
+7. Write the sample input in `fixtures/` to match what the source really gives, **with every name, address, id and
+   message made up**. Learn the shape from the service's documentation, or from the user's real data read-only, but
+   never copy a real value into a file. `clockwork check` runs your code over it offline, whole and damaged.
+8. Run `clockwork check <name>` until it passes. **Show the user what you wrote** and what it reads before you switch
    it on.
 
 A new source starts in shadow mode: the model decides nothing for it until it agrees with your labels, so label its

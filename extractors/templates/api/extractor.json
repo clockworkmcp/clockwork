@@ -1,0 +1,9 @@
+{
+  "name": "my-source",
+  "source": "my-source",
+  "description": "What this brings in, in one sentence. Say that it is read-only.",
+  "run": { "command": "node", "args": ["main.mjs"] },
+  "requires": [{ "file": "{extractorData}/key", "help": "Where to make a read-only key at the service, step by step. Save it as the only line of that file and run chmod 600 on it." }],
+  "ready": { "file": "{extractorData}/key" },
+  "restartSeconds": 60
+}

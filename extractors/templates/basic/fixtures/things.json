@@ -1,0 +1,4 @@
+[
+  { "id": "sample-1", "from": "office@riverside-school.example", "name": "Riverside School Office", "at": "2026-01-05T08:30:00Z", "text": "School closes at 1pm this Friday. Please reply by Wednesday." },
+  { "id": "sample-2", "from": "news@cafe-lumiere.example", "name": "Café Lumière", "at": "2026-01-05T09:10:00Z", "text": "Our winter menu is here." }
+]
